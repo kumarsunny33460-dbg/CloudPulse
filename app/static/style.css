@@ -1,0 +1,115 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    min-height: 100vh;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #0b1020;
+    color: #f5f7ff;
+}
+
+.container {
+    width: min(1000px, 90%);
+    margin: auto;
+    padding: 90px 0;
+    text-align: center;
+}
+
+.badge {
+    display: inline-block;
+    padding: 8px 16px;
+    margin-bottom: 20px;
+    border: 1px solid #3b82f6;
+    border-radius: 30px;
+    color: #60a5fa;
+    font-size: 13px;
+    letter-spacing: 1px;
+}
+
+h1 {
+    font-size: 58px;
+    margin-bottom: 12px;
+}
+
+.subtitle {
+    color: #aab4cc;
+    font-size: 19px;
+    margin-bottom: 45px;
+}
+
+.status-card {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    text-align: left;
+
+    padding: 25px;
+    margin-bottom: 25px;
+
+    background: #141b2d;
+    border: 1px solid #26324d;
+    border-radius: 16px;
+}
+
+.status-indicator {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 15px #22c55e;
+}
+
+.status-card h2 {
+    margin-bottom: 7px;
+}
+
+.status-card p {
+    color: #9ca8bf;
+}
+
+.cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+}
+
+.card {
+    padding: 30px;
+    background: #141b2d;
+    border: 1px solid #26324d;
+    border-radius: 16px;
+}
+
+.card span {
+    display: block;
+    color: #9ca8bf;
+    margin-bottom: 12px;
+}
+
+.card strong {
+    font-size: 32px;
+}
+
+footer {
+    margin-top: 50px;
+    color: #68748c;
+    font-size: 14px;
+}
+
+@media (max-width: 700px) {
+
+    h1 {
+        font-size: 42px;
+    }
+
+    .cards {
+        grid-template-columns: 1fr;
+    }
+
+    .container {
+        padding: 60px 0;
+    }
+}
