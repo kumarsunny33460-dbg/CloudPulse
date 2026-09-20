@@ -1,0 +1,33 @@
+name: CloudPulse CI
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  docker-build:
+    name: Build CloudPulse Docker Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app
+          file: ./app/Dockerfile
+          push: false
+          tags: cloudpulse:ci
+
+      - name: Verify Docker image
+        run: docker image inspect cloudpulse:ci
