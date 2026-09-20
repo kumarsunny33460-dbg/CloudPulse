@@ -27,6 +27,7 @@ jobs:
           context: ./app
           file: ./app/Dockerfile
           push: false
+          load: true
           tags: cloudpulse:ci
 
       - name: Verify Docker image
