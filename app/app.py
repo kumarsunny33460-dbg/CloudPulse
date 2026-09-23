@@ -16,7 +16,7 @@ from urllib.error import HTTPError, URLError
 
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-
+import os
 from functools import wraps
 
 import time
@@ -28,13 +28,24 @@ app = Flask(__name__)
 # ============================================================
 # APPLICATION CONFIGURATION
 # ============================================================
+database_url = os.getenv("DATABASE_URL")
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cloudpulse.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+if database_url:
+# Some PostgreSQL providers may return postgres://.
+# SQLAlchemy expects postgresql://.
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace(
+        "postgres://",
+        "postgresql://",
+     1
+    )
+    app.config["SQLALCHEMY_DATABASE_URI"] = database_url
 
-# Secret key for login sessions
-app.config["SECRET_KEY"] = "cloudpulse-development-secret-key"
+else:
+ app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///cloudpulse.db"
 
+ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY") or "cloudpulse-development-secret-key"
 
 db.init_app(app)
 
