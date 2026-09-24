@@ -382,6 +382,14 @@ def health():
     })
 
 
+@app.route("/api/cicd")
+def cicd():
+
+    return jsonify({
+        "status": "success",
+        "message": "CloudPulse CI/CD pipeline is working"
+    })
+
 # ============================================================
 # GET APPLICATIONS
 # ============================================================
