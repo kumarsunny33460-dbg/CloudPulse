@@ -24,3 +24,7 @@ Day 1 - Initial application development.
 
 Build, containerize, test, deploy, monitor, and manage a cloud-native
 application using modern DevOps practices.
+
+## CI/CD
+
+CloudPulse uses GitHub Actions for automated testing and Docker image publishing, with Render deployment triggered after CI checks pass.
