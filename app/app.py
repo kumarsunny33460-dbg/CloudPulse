@@ -17,12 +17,23 @@ from urllib.error import HTTPError, URLError
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
+import logging
 from functools import wraps
 
 import time
 
 
 app = Flask(__name__)
+# ============================================================
+# APPLICATION LOGGING
+# ============================================================
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+)
+
+logger = logging.getLogger("cloudpulse")
 
 
 # ============================================================
@@ -377,6 +388,8 @@ def home():
 @app.route("/health")
 def health():
 
+    logger.info("Health endpoint accessed")
+
     return jsonify({
         "status": "healthy"
     })
@@ -384,6 +397,8 @@ def health():
 
 @app.route("/api/cicd")
 def cicd():
+
+    logger.info("CI/CD verification endpoint accessed")
 
     return jsonify({
         "status": "success",
@@ -592,15 +607,33 @@ def application_health(application_id):
 @login_required
 def monitor_all_applications():
 
+    logger.info("Application monitoring started")
+
     applications = Application.query.order_by(
         Application.id.desc()
     ).all()
+
+    logger.info(
+        "Monitoring %s registered applications",
+        len(applications)
+    )
 
     results = []
 
     for application in applications:
 
+        logger.info(
+            "Checking application health: %s",
+            application.name
+        )
+
         result = check_application_health(application)
+
+        logger.info(
+            "Health check result: %s -> %s",
+            application.name,
+            result.get("health")
+        )
 
         create_incident_if_needed(
             application,
@@ -627,6 +660,14 @@ def monitor_all_applications():
         status="Open"
     ).count()
 
+    logger.info(
+        "Monitoring completed | Total: %s | Healthy: %s | Unhealthy: %s | Open incidents: %s",
+        total_applications,
+        healthy_applications,
+        unhealthy_applications,
+        open_incidents
+    )
+
     return jsonify({
         "summary": {
             "total": total_applications,
@@ -636,7 +677,6 @@ def monitor_all_applications():
         },
         "applications": results
     })
-
 
 # ============================================================
 # GET ALL INCIDENTS
