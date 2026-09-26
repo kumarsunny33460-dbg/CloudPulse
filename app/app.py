@@ -901,6 +901,11 @@ def resolve_incident(incident_id):
 
     if not incident:
 
+        logger.warning(
+            "Incident resolution failed | Incident ID: %s | Incident not found",
+            incident_id
+        )
+
         return jsonify({
             "error": "Incident not found"
         }), 404
@@ -910,12 +915,16 @@ def resolve_incident(incident_id):
 
     db.session.commit()
 
+    logger.info(
+        "Incident resolved | Incident ID: %s | Application ID: %s",
+        incident.id,
+        incident.application_id
+    )
+
     return jsonify({
         "message": "Incident resolved successfully",
         "incident": incident_to_dict(incident)
     })
-
-
 # ============================================================
 # DELETE INCIDENT
 # ============================================================
@@ -1185,7 +1194,18 @@ def create_incident_if_needed(
 
     if health_result["health"] != "DOWN":
 
+        logger.info(
+            "No incident required | Application: %s | Health: %s",
+            application.name,
+            health_result["health"]
+        )
+
         return None
+
+    logger.warning(
+        "Application DOWN | Checking for existing incident | Application: %s",
+        application.name
+    )
 
     existing_incident = Incident.query.filter_by(
         application_id=application.id,
@@ -1193,6 +1213,12 @@ def create_incident_if_needed(
     ).first()
 
     if existing_incident:
+
+        logger.info(
+            "Existing open incident found | Application: %s | Incident ID: %s",
+            application.name,
+            existing_incident.id
+        )
 
         return existing_incident
 
@@ -1204,14 +1230,19 @@ def create_incident_if_needed(
             f"is currently unreachable."
         ),
         severity="High",
-        status="Open"
+        status="Open"   
     )
 
     db.session.add(incident)
     db.session.commit()
 
-    return incident
+    logger.warning(
+        "New incident created | Application: %s | Incident ID: %s | Severity: High",
+        application.name,
+        incident.id
+    )
 
+    return incident
 
 # ============================================================
 # HEALTH CHECK
