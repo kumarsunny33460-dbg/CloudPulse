@@ -1219,12 +1219,24 @@ def create_incident_if_needed(
 
 def check_application_health(application):
 
+    logger.info(
+        "Starting health check | Application: %s | URL: %s",
+        application.name,
+        application.url
+    )
+
     parsed_url = urlparse(application.url)
 
     if parsed_url.scheme not in (
         "http",
         "https"
     ) or not parsed_url.netloc:
+
+        logger.warning(
+            "Invalid application URL | Application: %s | URL: %s",
+            application.name,
+            application.url
+        )
 
         return {
             "application_id": application.id,
@@ -1258,16 +1270,25 @@ def check_application_health(application):
                 start_time
             ) * 1000
 
+            response_time = round(
+                elapsed_time,
+                2
+            )
+
+            logger.info(
+                "Health check successful | Application: %s | Status: %s | Response time: %sms",
+                application.name,
+                response.status,
+                response_time
+            )
+
             return {
                 "application_id": application.id,
                 "name": application.name,
                 "url": application.url,
                 "environment": application.environment,
                 "health": "UP",
-                "response_time_ms": round(
-                    elapsed_time,
-                    2
-                ),
+                "response_time_ms": response_time,
                 "http_status": response.status,
                 "message": "Application is reachable"
             }
@@ -1279,16 +1300,25 @@ def check_application_health(application):
             start_time
         ) * 1000
 
+        response_time = round(
+            elapsed_time,
+            2
+        )
+
+        logger.warning(
+            "Application returned HTTP error | Application: %s | Status: %s | Response time: %sms",
+            application.name,
+            error.code,
+            response_time
+        )
+
         return {
             "application_id": application.id,
             "name": application.name,
             "url": application.url,
             "environment": application.environment,
             "health": "UP",
-            "response_time_ms": round(
-                elapsed_time,
-                2
-            ),
+            "response_time_ms": response_time,
             "http_status": error.code,
             "message": (
                 "Application responded with "
@@ -1300,6 +1330,12 @@ def check_application_health(application):
         URLError,
         TimeoutError
     ):
+
+        logger.error(
+            "Application unreachable | Application: %s | URL: %s",
+            application.name,
+            application.url
+        )
 
         return {
             "application_id": application.id,
@@ -1314,9 +1350,9 @@ def check_application_health(application):
 
     except Exception as error:
 
-        print(
-            f"Health check error for application "
-            f"{application.id}: {error}"
+        logger.exception(
+            "Unexpected health check error | Application: %s",
+            application.name
         )
 
         return {
