@@ -20,23 +20,33 @@
 # fails to deliver, which the `default` receiver's dead-man's-switch
 # message is designed to make obvious.
 # ==================================================================
-
 global:
   # --- SMTP (used by the email_options path and the watchdogs below) ---
+  #
+  # Alertmanager's own configuration has NO environment variable substitution.
+  # ${VAR} expansion exists only inside notification templates, and even the
+  # shell-style ${VAR:-default} form is not understood, so writing one here
+  # makes the file fail `amtool check-config` outright.
+  #
+  # These are therefore literal values to be edited before deploying. Generate
+  # a rendered copy from this template if you manage credentials in a repo:
+  #
+  #   envsubst < alertmanager.yml.tmpl > alertmanager.yml
+  #
+  # or supply the rendered file through the Helm chart
+  # (alertmanager.config), which is how the compose and Kubernetes stacks
+  # pick it up.
+
   # <REPLACE_ME: relay host:port, e.g. smtp.example.com:587>
-  # Templated from ${SMTP_SMARTHOST} at deploy time.
-  smtp_smarthost: ${SMTP_SMARTHOST:-smtp.example.com:587}
+  smtp_smarthost: "smtp.example.com:587"
   # <REPLACE_ME: envelope sender>
-  smtp_from: ${SMTP_FROM:-cloudpulse@localhost}
+  smtp_from: "cloudpulse@example.com"
   # <REPLACE_ME: SMTP username>
-  smtp_auth_username: ${SMTP_USERNAME}
+  smtp_auth_username: ""
   # <REPLACE_ME: SMTP password>
-  smtp_auth_password: ${SMTP_PASSWORD}
+  smtp_auth_password: ""
   # Refuse to send credentials over an unencrypted connection.
   smtp_require_tls: true
-
-  # Default when an alert carries no severity label.
-  resolve_timeout: 5m
 
 # Notification templates. The directory is baked into the container image at
 # /etc/alertmanager/templates and mounted read-only at runtime.
@@ -133,27 +143,28 @@ receivers:
       # it can post into the channel. It is deliberately not spelled out here
       # even as a shaped example, because a string that matches the token
       # format is rejected by GitHub push protection and can be copied into the
-      # file by accident. Supply it at deploy time instead:
-      #   helm install ... --set alerting.slackWebhook=<url>
-      # or point it at a secret manager.
-      - url: "<slack-incoming-webhook-url>"
+      # file by accident. The placeholder below is an unroutable address that
+      # still satisfies `amtool check-config`, so this file can be validated in
+      # CI without a live credential ever being committed. Replace it at deploy
+      # time, or point the receivers at a secret manager.
+      - url: "http://127.0.0.1:9/replace-with-slack-incoming-webhook"
         send_resolved: true
         http_config:
           follow_redirects: true
     # Dead man's switch. If this stops arriving, the pipeline is broken even
     # when nothing is on fire. Uncomment and point it at an integration.
     # webhook_configs:
-    #   - url: <REPLACE_ME: healthchecks.io ping URL>
+    #   - url: "http://127.0.0.1:9/replace-with-healthchecks-ping-url"
     #     send_resolved: true
 
   # --- critical: Slack and a phone ------------------------------
   - name: critical
     webhook_configs:
-      - url: "<REPLACE_ME: Slack webhook for the #incidents channel>"
+      - url: "http://127.0.0.1:9/replace-with-slack-incoming-webhook"
         send_resolved: true
     pagerduty_configs:
       # <REPLACE_ME: PagerDuty integration key, 32 hex characters>
-      - routing_key: "<REPLACE_ME: 00000000000000000000000000000000>"
+      - routing_key: "00000000000000000000000000000000"
         description: '{{ .GroupLabels.Severity | toUpper }}: {{ .CommonLabels.alertname }} on {{ .CommonLabels.application | default "cloudpulse" }}'
         # Page again while the alert is still firing even if nothing changed.
         client_url: '{{ .StatusReceiverURL }}'
@@ -164,9 +175,9 @@ receivers:
           summary: '{{ .CommonAnnotations.summary }}'
           description: '{{ .CommonAnnotations.description }}'
           runbook_url: '{{ (index .CommonLabels "runbook_url") | default "n/a" }}'
-        # Re-page every 30m while the condition holds. This is independent of
-        # the route's repeat_interval, which only controls re-notification.
-        resolve_timeout: 5m
+        # Re-page every 30m while the condition holds, via the route's
+        # repeat_interval below. Alertmanager has no resolve_timeout field at
+        # all; adding one makes the file fail amtool check-config.
 
   # --- null: acknowledged, silenced, and intentionally dropped ----
   - name: "null"

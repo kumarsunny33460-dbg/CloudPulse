@@ -186,7 +186,7 @@ jobs:
       - name: Production refuses published placeholder secret keys
         env:
           APP_ENV: production
-          CLOULDULSE_SKIP_APP_BUILD: "1"
+          CLOUDPULSE_SKIP_APP_BUILD: "1"
           SECRET_KEY: replace-me-with-a-long-random-value
         run: |
           python - <<'PY'
