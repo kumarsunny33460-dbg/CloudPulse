@@ -35,36 +35,51 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: validate
-
-    # The cluster credentials are optional. Without KUBECONFIG this repository
-    # has no cluster to deploy to, and failing the build on every push to main
-    # would report a broken pipeline when nothing is actually wrong. The
-    # manifests are still validated by the `validate` job either way.
-    # Remove the secrets check once a cluster and its secret are configured.
-    if: github.ref == 'refs/heads/main' && secrets.KUBECONFIG != ''
-
+    if: github.ref == 'refs/heads/main'
     environment: production
 
     steps:
+      - name: Check for cluster credentials
+        # Without KUBECONFIG this repository has no cluster to deploy to.
+        # Failing on every push to main would report a broken pipeline when
+        # nothing is actually wrong, so the deploy is skipped instead. The
+        # manifests are still validated by the `validate` job either way.
+        #
+        # The check is a step rather than a job level `if` because the `secrets`
+        # context is not available in a job's `if` expression.
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+        run: |
+          if [ -z "$KUBECONFIG" ]; then
+            echo "::notice::KUBECONFIG is not configured; skipping the cluster deploy."
+            echo "Add it under Settings -> Secrets to enable real deployments."
+            echo "DEPLOY_SKIPPED=1" >> "$GITHUB_ENV"
+          fi
+
       - name: Checkout source code
+        if: env.DEPLOY_SKIPPED != '1'
         uses: actions/checkout@v4
 
       - name: Configure kubectl
+        if: env.DEPLOY_SKIPPED != '1'
         uses: azure/k8s-set-context@v4
         with:
           kubeconfig: ${{ secrets.KUBECONFIG }}
 
       - name: Update the image tag
+        if: env.DEPLOY_SKIPPED != '1'
         run: |
           cd k8s/overlays/production
           kustomize edit set image cloudpulse=${IMAGE}
 
       - name: Apply manifests
+        if: env.DEPLOY_SKIPPED != '1'
         run: |
           kubectl apply -k k8s/overlays/production
           kubectl -n ${NAMESPACE} rollout status deployment/cloudpulse --timeout=300s
 
       - name: Verify the deployment responds
+        if: env.DEPLOY_SKIPPED != '1'
         run: |
           for attempt in $(seq 1 30); do
             if kubectl -n ${NAMESPACE} get pods -l app=cloudpulse \
@@ -77,3 +92,9 @@ jobs:
           done
           kubectl -n ${NAMESPACE} get pods -l app=cloudpulse
           exit 1
+
+      - name: Report the skipped deploy
+        if: env.DEPLOY_SKIPPED == '1'
+        run: |
+          echo "Deployment skipped: no cluster is configured for this repository."
+          echo "The manifests in k8s/overlays are validated by the 'Validate manifests' job."
