@@ -12,11 +12,18 @@ import pathlib
 import re
 
 import pytest
-import yaml
 
 pytestmark = pytest.mark.skipif(
     not (pathlib.Path(__file__).resolve().parents[1] / "chart" / "cloudpulse").is_dir(),
     reason="chart directory not present",
+)
+
+# PyYAML is a development dependency, not a runtime one. Importing it at module
+# level made collection fail outright on an environment that lacks it, which
+# broke the whole CI test job rather than skipping these few tests.
+yaml = pytest.importorskip(
+    "yaml",
+    reason="PyYAML is required to read chart/cloudpulse/values.yaml",
 )
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]

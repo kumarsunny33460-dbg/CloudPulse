@@ -96,7 +96,7 @@ resource "aws_route_table_association" "private" {
 # ------------------------------------------------------------------
 
 resource "aws_ecr_repository" "cloudpulse" {
-  name                 = "${var.project_name}"
+  name                 = var.project_name
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -130,9 +130,9 @@ resource "aws_ecr_lifecycle_policy" "cleanup" {
         description  = "Expire untagged images after 7 days"
         selection    = { tagStatus = "untagged" }
         action = {
-          type   = "expire"
-          count  = 7
-          unit   = "days"
+          type  = "expire"
+          count = 7
+          unit  = "days"
         }
       },
     ]
@@ -173,10 +173,10 @@ resource "aws_db_instance" "cloudpulse" {
   backup_window           = "03:00-04:00"
   maintenance_window      = "sun:04:30-sun:05:30"
 
-  multi_az               = var.environment == "production"
-  publicly_accessible    = false
-  skip_final_snapshot    = var.environment != "production"
-  deletion_protection    = var.environment == "production"
+  multi_az            = var.environment == "production"
+  publicly_accessible = false
+  skip_final_snapshot = var.environment != "production"
+  deletion_protection = var.environment == "production"
 
   performance_insights_enabled = true
   monitoring_interval          = 60

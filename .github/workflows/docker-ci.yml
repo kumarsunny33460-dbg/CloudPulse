@@ -151,20 +151,60 @@ jobs:
         run: |
           python -c "import sys; sys.path.insert(0, 'app'); from app import create_app; create_app('testing')"
 
+      # CLOUDPULSE_SKIP_APP_BUILD stops app.py building an application at
+      # import time, so the import can succeed and the failure is reported by
+      # create_app() itself. Without it the module-level `app = create_app()`
+      # raises during the import and the try/except below never runs.
       - name: Production refuses to boot without a SECRET_KEY
+        env:
+          APP_ENV: production
+          CLOUDPULSE_SKIP_APP_BUILD: "1"
         run: |
-          APP_ENV=production python -c "
+          python - <<'PY'
+          import os
           import sys
-          sys.path.insert(0, 'app')
+
+          os.environ.pop("SECRET_KEY", None)
+          os.environ.pop("ALLOW_INSECURE_SECRET_KEY", None)
+
+          sys.path.insert(0, "app")
+          from app import create_app
+
           try:
-              from app import create_app
-              create_app('production')
+              create_app("production")
           except RuntimeError as error:
-              print('refused to boot:', error)
+              print("Refused to boot, as expected:")
+              print("   ", error)
               sys.exit(0)
-          print('FAIL: production booted without SECRET_KEY')
+
+          print("FAIL: production booted without a SECRET_KEY")
           sys.exit(1)
-          "
+          PY
+
+      # The same check for a key that is published in this repository, and for
+      # one that is simply too short to be a real signing key.
+      - name: Production refuses published placeholder secret keys
+        env:
+          APP_ENV: production
+          CLOULDULSE_SKIP_APP_BUILD: "1"
+          SECRET_KEY: replace-me-with-a-long-random-value
+        run: |
+          python - <<'PY'
+          import sys
+
+          sys.path.insert(0, "app")
+          from app import create_app
+
+          try:
+              create_app("production")
+          except RuntimeError as error:
+              print("Refused the published placeholder, as expected:")
+              print("   ", error)
+              sys.exit(0)
+
+          print("FAIL: production accepted a key published in this repository")
+          sys.exit(1)
+          PY
 
       - name: Run automated tests
         run: |

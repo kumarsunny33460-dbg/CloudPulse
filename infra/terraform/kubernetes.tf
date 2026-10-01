@@ -1,8 +1,8 @@
 resource "kubernetes_namespace" "cloudpulse" {
   metadata {
-    name        = var.kubernetes_namespace
+    name = var.kubernetes_namespace
     labels = {
-      "app.kubernetes.io/part-of" = var.project_name
+      "app.kubernetes.io/part-of"          = var.project_name
       "pod-security.kubernetes.io/enforce" = "restricted"
     }
   }
@@ -15,16 +15,16 @@ resource "kubernetes_config_map" "cloudpulse" {
   }
 
   data = {
-    APP_ENV                   = var.environment
-    ENABLE_SCHEDULER          = "true"
-    MONITOR_INTERVAL_SECONDS  = "60"
+    APP_ENV                     = var.environment
+    ENABLE_SCHEDULER            = "true"
+    MONITOR_INTERVAL_SECONDS    = "60"
     HEALTH_CHECK_RETENTION_DAYS = "30"
-    HEALTH_CHECK_TIMEOUT      = "5"
-    AUTO_CREATE_INCIDENTS     = "true"
-    AUTO_RESOLVE_INCIDENTS    = "true"
-    CSRF_PROTECTION_ENABLED   = "true"
-    SESSION_COOKIE_SECURE     = "true"
-    STRICT_ORIGIN_CHECK       = "true"
+    HEALTH_CHECK_TIMEOUT        = "5"
+    AUTO_CREATE_INCIDENTS       = "true"
+    AUTO_RESOLVE_INCIDENTS      = "true"
+    CSRF_PROTECTION_ENABLED     = "true"
+    SESSION_COOKIE_SECURE       = "true"
+    STRICT_ORIGIN_CHECK         = "true"
     DATABASE_URL = format(
       "postgresql://%s:%s@%s:5432/%s",
       var.db_username,
@@ -106,7 +106,7 @@ resource "kubernetes_deployment" "cloudpulse" {
 
           port {
             container_port = 5000
-            name          = "http"
+            name           = "http"
           }
 
           env_from {
@@ -129,6 +129,13 @@ resource "kubernetes_deployment" "cloudpulse" {
               cpu    = "500m"
               memory = "512Mi"
             }
+          }
+
+          # read_only_root_filesystem is set above, so the writable scratch
+          # paths the interpreter needs are backed by an in-memory volume.
+          volume_mount {
+            name       = "tmp"
+            mount_path = "/tmp"
           }
 
           # read_only_root_filesystem is set above, so the writable scratch
@@ -163,20 +170,23 @@ resource "kubernetes_deployment" "cloudpulse" {
 
           security_context {
             allow_privilege_escalation = false
-            read_only_root_filesystem   = true
+            read_only_root_filesystem  = true
 
             capabilities {
               drop = ["ALL"]
             }
           }
         }
-      }
 
-      volume {
-        name = "tmp"
+        # A pod volume, so it belongs inside the pod spec (spec.template.spec),
+        # not on the deployment's own spec. The container above is read-only at
+        # the root, and this is the writable scratch path it needs.
+        volume {
+          name = "tmp"
 
-        empty_dir {
-          medium = "Memory"
+          empty_dir {
+            medium = "Memory"
+          }
         }
       }
     }

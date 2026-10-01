@@ -54,7 +54,12 @@ from services import schema as schema_service  # noqa: E402
 # Backwards compatible aliases for the original monolith helpers.
 from services.incidents import create_incident_if_needed  # noqa: E402,F401
 from sqlalchemy.exc import IntegrityError
-from werkzeug.security import check_password_hash, generate_password_hash  # noqa: E402
+from werkzeug.security import check_password_hash, generate_password_hash
+
+
+def env_flag(name: str) -> bool:
+    """Read a boolean environment variable without needing an app context."""
+    return (os.getenv(name) or "").strip().lower() in {"1", "true", "yes", "on"}  # noqa: E402
 
 try:  # Optional: loads .env during local development only.
     from dotenv import load_dotenv
@@ -667,8 +672,18 @@ def _start_scheduler(flask_app: Flask) -> None:
         scheduler.start(flask_app)
 
 
-app = create_app()
-_start_scheduler(app)
+# Gunicorn serves ``app:app``, so a module level application object has to
+# exist. Building it at import time means importing this module in a production
+# environment with an invalid configuration raises here, which is intended --
+# the process must not start.
+#
+# The guard keeps the WSGI import working when the caller wants to supply its own
+# environment (the test suite, a CLI, a config check), so that
+# ``from app import create_app`` can report the misconfiguration instead of
+# failing on the import line itself.
+if not env_flag("CLOUDPULSE_SKIP_APP_BUILD"):
+    app = create_app()
+    _start_scheduler(app)
 
 
 if __name__ == "__main__":
