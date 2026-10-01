@@ -294,11 +294,15 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/cloudpulse:latest
             ghcr.io/${{ github.repository_owner }}/cloudpulse:${{ github.sha }}
 
+      # The key must satisfy the same production check the application enforces:
+      # at least 32 characters and not one of the published placeholders. A
+      # short value here is refused at boot, so the smoke test would fail on the
+      # security check rather than on anything to do with the image.
       - name: Smoke test the published image
         run: |
           docker run -d --name cloudpulse-smoke \
             -e APP_ENV=production \
-            -e SECRET_KEY=ci-smoke-secret \
+            -e SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
             -p 5000:5000 \
             ghcr.io/${{ github.repository_owner }}/cloudpulse:${{ github.sha }}
           for attempt in $(seq 1 20); do
