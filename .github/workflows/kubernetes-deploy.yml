@@ -35,7 +35,14 @@ jobs:
     name: Deploy to Kubernetes
     runs-on: ubuntu-latest
     needs: validate
-    if: github.ref == 'refs/heads/main'
+
+    # The cluster credentials are optional. Without KUBECONFIG this repository
+    # has no cluster to deploy to, and failing the build on every push to main
+    # would report a broken pipeline when nothing is actually wrong. The
+    # manifests are still validated by the `validate` job either way.
+    # Remove the secrets check once a cluster and its secret are configured.
+    if: github.ref == 'refs/heads/main' && secrets.KUBECONFIG != ''
+
     environment: production
 
     steps:
