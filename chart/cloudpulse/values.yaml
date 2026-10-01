@@ -16,7 +16,7 @@ replicaCount: 2
 
 image:
   # Container image repository. CloudPulse images are published to GHCR.
-  repository: ghcr.io/your-github-username/cloudpulse
+  repository: ghcr.io/kumarsunny33460-dbg/cloudpulse
   # Image tag. Defaults to the chart appVersion when left empty.
   tag: ""
   pullPolicy: IfNotPresent

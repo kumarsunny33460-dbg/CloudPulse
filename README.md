@@ -692,7 +692,7 @@ on `main`, applies them to the configured cluster and waits for a healthy rollou
 ```bash
 cd infra/terraform
 terraform init
-terraform plan -var="image=ghcr.io/<owner>/cloudpulse:latest"
+terraform plan -var="image=ghcr.io/kumarsunny33460-dbg/cloudpulse:latest"
 terraform apply
 ```
 

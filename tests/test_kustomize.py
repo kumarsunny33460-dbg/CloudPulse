@@ -108,3 +108,36 @@ def test_the_two_overlays_differ():
     assert config_map_value(staging, "MONITOR_INTERVAL_SECONDS") != config_map_value(
         production, "MONITOR_INTERVAL_SECONDS"
     )
+
+
+def test_the_rendered_image_is_the_real_registry():
+    """A placeholder image name would make every deploy pull nothing.
+
+    The overlays shipped ``your-github-username``, which is a placeholder in a
+    configuration file -- unlike a documentation example, nothing substitutes it
+    at deploy time, so the deployment would sit at ImagePullBackOff.
+    """
+    import pathlib
+    import re
+
+    owner = "kumarsunny33460-dbg"
+
+    for name in (
+        "k8s/overlays/staging/kustomization.yaml",
+        "k8s/overlays/production/kustomization.yaml",
+        "chart/cloudpulse/values.yaml",
+    ):
+        text = pathlib.Path(name).read_text(encoding="utf-8")
+        assert "your-github-username" not in text, f"{name} still has a placeholder owner"
+
+        repositories = re.findall(r"ghcr\.io/([\w.\-]+)/cloudpulse", text)
+        assert repositories, f"{name} does not name an image at all"
+        for repository in repositories:
+            assert repository == owner, f"{name} points at ghcr.io/{repository}/cloudpulse"
+
+
+def test_the_rendered_overlays_point_at_the_real_image():
+    for overlay in OVERLAYS:
+        rendered = render(overlay)
+        assert "ghcr.io/kumarsunny33460-dbg/cloudpulse" in rendered
+        assert "your-github-username" not in rendered

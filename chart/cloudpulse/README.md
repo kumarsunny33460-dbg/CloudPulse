@@ -88,7 +88,7 @@ kubectl -n cloudpulse delete secret cloudpulse-secrets
 | --- | --- | --- |
 | `replicaCount` | `2` | Pods to run. Ignored when `autoscaling.enabled=true`. |
 | `revisionHistoryLimit` | `3` | ReplicaSets kept for rollback. |
-| `image.repository` | `ghcr.io/your-github-username/cloudpulse` | Container image repository. |
+| `image.repository` | `ghcr.io/kumarsunny33460-dbg/cloudpulse` | Container image repository. |
 | `image.tag` | `""` | Image tag. Empty falls back to the chart `appVersion`. |
 | `image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `imagePullSecrets` | `[]` | Secrets for a private registry. |

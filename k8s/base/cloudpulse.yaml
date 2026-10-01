@@ -184,7 +184,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: cloudpulse
-          image: ghcr.io/your-github-username/cloudpulse:latest
+          image: ghcr.io/kumarsunny33460-dbg/cloudpulse:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

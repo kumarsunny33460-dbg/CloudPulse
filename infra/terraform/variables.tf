@@ -61,7 +61,7 @@ variable "kubernetes_namespace" {
 variable "image" {
   description = "Container image deployed to Kubernetes."
   type        = string
-  default     = "ghcr.io/your-github-username/cloudpulse:latest"
+  default     = "ghcr.io/kumarsunny33460-dbg/cloudpulse:latest"
 }
 
 # ------------------------------------------------------------------

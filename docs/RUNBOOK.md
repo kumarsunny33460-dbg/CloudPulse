@@ -148,7 +148,7 @@ before adding indexes.
 
 ```bash
 cd k8s/overlays/production
-kustomize edit set image cloudpulse=ghcr.io/<owner>/cloudpulse:<sha>
+kustomize edit set image cloudpulse=ghcr.io/kumarsunny33460-dbg/cloudpulse:<sha>
 kubectl apply -k .
 kubectl -n cloudpulse rollout status deployment/cloudpulse --timeout=300s
 kubectl -n cloudpulse rollout undo deployment/cloudpulse     # if it misbehaves

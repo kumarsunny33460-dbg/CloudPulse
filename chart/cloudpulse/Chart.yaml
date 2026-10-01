@@ -15,14 +15,14 @@ keywords:
   - observability
   - prometheus
 
-home: https://github.com/your-github-username/cloudpulse
+home: https://github.com/kumarsunny33460-dbg/CloudPulse
 sources:
-  - https://github.com/your-github-username/cloudpulse
+  - https://github.com/kumarsunny33460-dbg/CloudPulse
 
 maintainers:
   - name: CloudPulse Maintainers
     email: maintainers@cloudpulse.example.com
-    url: https://github.com/your-github-username/cloudpulse
+    url: https://github.com/kumarsunny33460-dbg/CloudPulse
 
 annotations:
   category: Monitoring

@@ -15,5 +15,5 @@ labels:
       app.kubernetes.io/managed-by: kustomize
 
 images:
-  - name: ghcr.io/your-github-username/cloudpulse
+  - name: ghcr.io/kumarsunny33460-dbg/cloudpulse
     newTag: latest
