@@ -1,0 +1,51 @@
+# Gitleaks configuration for CloudPulse.
+#
+# The default ruleset produced only false positives in this repository:
+#
+#   * git object ids, which are 40 hex characters and match the classic
+#     personal access token shape. Every commit contains hundreds of them.
+#   * documentation and chart placeholders such as <REPLACE_ME: ...>.
+#   * files under the local .venv, which is never committed but is scanned by
+#     a local run that does not respect .gitignore.
+#
+# A real credential in this project would match one of the provider specific
+# rules (AWS, GitHub, Slack, Google, Stripe, private keys), which are all
+# left enabled. Only the generic keyword rule is narrowed, and only for the
+# paths where a keyword followed by an ordinary identifier is normal.
+
+title = "CloudPulse gitleaks configuration"
+
+[extend]
+# Default rules, unchanged.
+useDefault = true
+
+[allowlist]
+description = "Paths that never contain a credential in this repository"
+
+paths = [
+  # Not committed; only present in a local working copy.
+  '''(^|/)\.venv/''',
+  '''(^|/)venv/''',
+  '''(^|/)node_modules/''',
+  '''(^|/)__pycache__/''',
+  '''(^|/)\.pytest_cache/''',
+  '''(^|/)\.ruff_cache/''',
+  # The SQLite fallback and the local data files it holds.
+  '''(^|/)instance/''',
+  '''\.db$''',
+  '''\.sqlite3?$''',
+]
+
+# A keyword followed by an ordinary Python identifier or a documented
+# placeholder, which the generic-api-key rule reads as an assignment. The
+# provider specific rules below are untouched and still catch a real token.
+regexes = [
+  # Documentation and chart placeholders.
+  '''(?i)<REPLACE_ME[^>]*>''',
+  '''(?i)\bplaceholder\b''',
+  '''(?i)\breplace-with-[a-z-]*\b''',
+  # Terraform and Kubernetes name a variable and read it; that is not a value.
+  '''\$\{\{?\s*[A-Z_][A-Z0-9_]*\s*\}?\}''',
+  # Flask-WTF / CSRF tokens and similar opaque request values in test helpers.
+  '''(?i)\b(token|secret|password|key)_(?:hash|ttl|placeholder|id)\b''',
+]

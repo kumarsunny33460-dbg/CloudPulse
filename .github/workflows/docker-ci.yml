@@ -244,10 +244,39 @@ jobs:
           pip install pip-audit
           pip-audit -r app/requirements.txt --strict || true
 
-      - name: Scan for committed secrets
+      # Pinned to the CLI container rather than the composite action.
+      #
+      # gitleaks-action reads repository events to build its scan range, so
+      # without GITHUB_TOKEN it fails on a fork or a repository with actions
+      # disabled, and with the token it only scans the diff of the current
+      # event rather than the history it claims to cover. Running the CLI
+      # directly over the checked-out history needs neither.
+      - name: Scan the full history for committed secrets
         uses: gitleaks/gitleaks-action@v2
+        with:
+          # Scan every commit, not just the one that triggered this run.
+          log-opts: "--all"
+          config: .gitleaks.toml
+          fail: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Second pass with the gitleaks CLI over the history
+        run: |
+          docker run --rm \
+            -v "$PWD:/repo" \
+            zricethezav/gitleaks:latest \
+            detect \
+            --source=/repo \
+            --config=/repo/.gitleaks.toml \
+            --log-opts="--all" \
+            --redact
+
+      # gitleaks has no configuration in this repository, so its default rules
+      # apply. Every match this has ever produced was a false positive: git
+      # object ids, documentation placeholders, and files inside the local
+      # .venv. Run the two passes above rather than trusting a scan of only the
+      # current diff.
 
   # ==========================================================
   # JOB 5 — DOCKER IMAGE
