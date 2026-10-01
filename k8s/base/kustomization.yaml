@@ -1,7 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Base manifests shared by every environment. The overlays in
+# Base manifests shared by every environment. The overlays reference this directory.
+# This file must exist for `kubectl kustomize` to resolve them. The overlays in
 # ../overlays/* reference this directory, so this file must exist for
 # `kubectl kustomize` (or `helm`-less CI rendering) to resolve them.
 resources:
