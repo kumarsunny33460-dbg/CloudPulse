@@ -1,0 +1,70 @@
+CloudPulse {{ .Chart.AppVersion }} was released as {{ .Release.Name }} in namespace {{ .Release.Namespace }}.
+
+Reachable at:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get -o jsonpath="{.spec.ports[0].nodePort}" svc {{ include "cloudpulse.fullname" . }})
+  export NODE_IP=$(kubectl -n {{ .Release.Namespace }} get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  It can take a minute for the load balancer IP to be provisioned.
+
+  export SERVICE_IP=$(kubectl -n {{ .Release.Namespace }} get svc -o jsonpath="{.status.loadBalancer.ingress[0].ip}" {{ include "cloudpulse.fullname" . }})
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "cloudpulse.fullname" . }} 5000:{{ .Values.service.port }}
+  echo http://127.0.0.1:5000
+{{- end }}
+
+Secrets:
+{{- if .Values.config.createSecret }}
+  A Secret named {{ include "cloudpulse.secretName" . }} was created from your values.
+  Review it: `kubectl -n {{ .Release.Namespace }} get secret {{ include "cloudpulse.secretName" . }} -o yaml`
+  It is annotated helm.sh/resource-policy: keep, so `helm uninstall` will NOT
+  delete it. Remove it by hand once you no longer need it.
+  Values.yaml still contains the plaintext SECRET_KEY and DATABASE_URL. Do not
+  commit that file.
+{{- else }}
+  This release mounts the pre-existing Secret {{ include "cloudpulse.secretName" . }}.
+  It must exist in namespace {{ .Release.Namespace }} with the keys SECRET_KEY
+  and DATABASE_URL, or the pods will stay in CreateContainerConfigError.
+{{- end }}
+
+Check the rollout:
+  kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "cloudpulse.fullname" . }}
+
+Monitoring:
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+  ServiceMonitor {{ include "cloudpulse.fullname" . }} targets /metrics every {{ .Values.monitoring.serviceMonitor.interval }}.
+{{- else }}
+  ServiceMonitor is disabled. Prometheus is scraping through the
+  prometheus.io/scrape pod annotations instead.
+{{- end }}
+{{- if .Values.monitoring.prometheusRule.enabled }}
+  PrometheusRule {{ include "cloudpulse.fullname" . }} is installed. Confirm your
+  Prometheus resource selects it: it needs a matching
+  `prometheusRuleSelector` and the labels
+  {{- if .Values.monitoring.prometheusRule.additionalLabels }}
+  {{ toYaml .Values.monitoring.prometheusRule.additionalLabels | nindent 2 }}
+  {{- else }}
+  (none set - add monitoring.prometheusRule.additionalLabels if your Prometheus only selects labelled rules)
+  {{- end }}
+{{- end }}
+
+{{- if .Values.networkPolicy.enabled }}
+NetworkPolicy is enabled: CloudPulse accepts ingress only from
+{{- if .Values.networkPolicy.ingressNamespaceSelector }}
+the namespace selector in networkPolicy.ingressNamespaceSelector
+{{- else }}
+any namespace with the label k8s-app=kube-dns-style selector NOT configured - the default policy allows traffic from
+every namespace. Set networkPolicy.ingressNamespaceSelector to your ingress
+controller namespace label
+{{- end }}
+on port {{ .Values.service.targetPort }}. If the Ingress cannot reach CloudPulse,
+that selector is the first thing to check.
+{{- end }}

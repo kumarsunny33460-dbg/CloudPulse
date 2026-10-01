@@ -1,0 +1,48 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 30s
+  external_labels:
+    platform: cloudpulse
+    # Prometheus does not interpolate environment variables in its config file,
+    # so this is a literal. Keep one config file per environment, or override it
+    # with the Kubernetes Helm chart, rather than expecting ${ENVIRONMENT}.
+    environment: local
+
+# Rule files. The path matches where monitoring/alert-rules.yml is mounted in
+# the Prometheus container. The same rules are also published as a
+# PrometheusRule CRD by chart/cloudpulse/templates/prometheusrule.yaml for
+# clusters running the Prometheus Operator; keep the two in step.
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+# Alertmanager. Without this block, alerts are evaluated and shown in the UI
+# but nobody is ever told. The routing tree, receivers and inhibition rules
+# live in monitoring/alertmanager.yml.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            # Service name on the shared compose network. This must match the
+            # `container_name`/`services` key of the alertmanager service in
+            # docker-compose.yml.
+            - alertmanager:9093
+      # Alertmanager is on the same network as Prometheus, so a short timeout
+      # is enough; the default 10s stalls every rule evaluation.
+      timeout: 10s
+
+scrape_configs:
+  - job_name: cloudpulse
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets:
+          # Service name on the shared compose network. Must match the
+          # `services` key in docker-compose.yml, which is `cloudpulse`.
+          - cloudpulse:5000
+        labels:
+          service: cloudpulse
+
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090

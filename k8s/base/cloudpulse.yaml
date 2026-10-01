@@ -1,0 +1,457 @@
+# CloudPulse base manifests. Environment overlays live in k8s/overlays.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudpulse
+  labels:
+    app.kubernetes.io/part-of: cloudpulse
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+# CloudPulse never calls the Kubernetes API, so no API token is projected
+# into the container. Without this the default ServiceAccount token is mounted
+# and any process in the pod could read or change cluster resources.
+automountServiceAccountToken: false
+---
+# The role is intentionally empty. CloudPulse has no control-plane client, so
+# granting it any verb would be unused privilege. It exists and is bound so a
+# future feature (a leader-election sidecar, a debug endpoint) has a reviewed
+# place to add rules, and so a cluster policy that requires every
+# ServiceAccount to have an explicit Role reference is satisfied. Delete both
+# objects if your policy does not require the reference.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+rules: []
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cloudpulse
+subjects:
+  - kind: ServiceAccount
+    name: cloudpulse
+    namespace: cloudpulse
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudpulse-config
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+data:
+  APP_ENV: production
+  ENABLE_SCHEDULER: "true"
+  MONITOR_INTERVAL_SECONDS: "60"
+  MONITOR_DEGRADED_AFTER_CHECKS: "2"
+  HEALTH_CHECK_TIMEOUT: "5"
+  AUTO_CREATE_INCIDENTS: "true"
+  AUTO_RESOLVE_INCIDENTS: "true"
+  CSRF_PROTECTION_ENABLED: "true"
+  STRICT_ORIGIN_CHECK: "true"
+  SESSION_COOKIE_SECURE: "true"
+  SESSION_COOKIE_NAME: cloudpulse_session
+  DEFAULT_PAGE_SIZE: "25"
+  SCHEDULER_TIMEZONE: UTC
+  LOG_FORMAT: json
+  LOG_LEVEL: INFO
+
+  # Addresses or CIDR ranges whose X-Forwarded-For header is believed. Behind
+  # the Ingress below the peer is the ingress controller's pod, so this should
+  # cover the cluster pod CIDR. Leave empty when CloudPulse is reached directly:
+  # the header is client supplied, and trusting it would let an attacker claim a
+  # fresh identity per request and walk straight past the login rate limiter.
+  TRUSTED_PROXY_NETWORKS: ""
+
+  # Brute force protection. Counters are per (email, client IP) pair and live
+  # in process memory, so with more than one replica the effective limit is
+  # this value multiplied by the replica count. Set to 0 to disable a scope.
+  LOGIN_MAX_ATTEMPTS: "5"
+  LOGIN_ATTEMPT_WINDOW_SECONDS: "300"
+  LOGIN_LOCKOUT_SECONDS: "900"
+  REGISTRATION_MAX_ATTEMPTS: "5"
+  PASSWORD_RESET_MAX_ATTEMPTS: "5"
+
+  # Account recovery. Tokens are single use; issuing a new one invalidates the
+  # previous. Turning on verification blocks sign-in until the address is
+  # confirmed.
+  PASSWORD_RESET_TOKEN_TTL_SECONDS: "3600"
+  EMAIL_VERIFICATION_TOKEN_TTL_SECONDS: "86400"
+  REQUIRE_EMAIL_VERIFICATION: "false"
+  MIN_PASSWORD_LENGTH: "8"
+
+  # Retention for the tables that grow without bound, and how often the
+  # scheduled job runs. A value of 0 keeps that table forever.
+  HEALTH_CHECK_RETENTION_DAYS: "30"
+  AUDIT_LOG_RETENTION_DAYS: "180"
+  NOTIFICATION_RETENTION_DAYS: "30"
+  RETENTION_JOB_HOURS: "6"
+
+  # Public address used in password reset and verification links. Leave empty
+  # to build links from the inbound request, which would put the in-cluster
+  # host name into the email whenever CloudPulse sits behind this Ingress.
+  PUBLIC_BASE_URL: ""
+---
+# Every value below is a placeholder and must be replaced before applying.
+#
+#   SECRET_KEY    generate with: python -c "import secrets;print(secrets.token_urlsafe(48))"
+#                 CloudPulse refuses to start in production if this is left as a
+#                 placeholder, because this repository is public and the value is
+#                 therefore readable by anyone. Set ALLOW_INSECURE_SECRET_KEY=true
+#                 to override that deliberately.
+#   DATABASE_URL  cloudpulse-postgres is NOT defined in this manifest. Point it
+#                 at a managed RDS instance, or add the database to
+#                 docker-compose locally. An unreachable host here surfaces as
+#                 /health/ready returning 503, not as a startup error.
+#
+# The Ingress host cloudpulse.example.com is a placeholder in the same way; it
+# must match the real DNS name and the TLS secret named below must exist.
+#
+# In production inject these values from a secrets manager (External Secrets
+# Operator, Secrets Store CSI Driver, or SOPS) instead of committing them.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudpulse-secrets
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+type: Opaque
+stringData:
+  SECRET_KEY: "replace-me-with-a-long-random-value"
+  DATABASE_URL: "postgresql://cloudpulse:cloudpulse@cloudpulse-postgres:5432/cloudpulse"
+  NOTIFY_WEBHOOK_URL: ""
+  NOTIFY_SMTP_HOST: ""
+  NOTIFY_SMTP_PASSWORD: ""
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+    app.kubernetes.io/name: cloudpulse
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: cloudpulse
+  template:
+    metadata:
+      labels:
+        app: cloudpulse
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: /metrics
+    spec:
+      serviceAccountName: cloudpulse
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: cloudpulse
+          image: ghcr.io/your-github-username/cloudpulse:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: cloudpulse-config
+            - secretRef:
+                name: cloudpulse-secrets
+          env:
+            - name: GIT_COMMIT_SHA
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.annotations['kubectl.kubernetes.io/last-applied-configuration']
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /health/live
+              port: 5000
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 5000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 5000
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              exec:
+                # The Service endpoint is removed at the same moment SIGTERM is
+                # delivered, so a sleep here keeps the container serving the
+                # requests already in flight for 10s. It must stay well below
+                # terminationGracePeriodSeconds (60).
+                command: ["sh", "-c", "sleep 10"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            # The image writes nothing outside /tmp: the database is remote and
+            # the logs go to stdout. Making the root filesystem read-only turns
+            # a container escape or a stray write into a visible failure
+            # instead of a silent one.
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # Writable scratch space, required because the root filesystem is
+        # read-only. gunicorn and the SQLite fallback both need a real
+        # directory; memory-backed keeps it off the node's disk.
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 256Mi
+      terminationGracePeriodSeconds: 60
+      topologySpreadConstraints:
+        # Spread across availability zones first, then across nodes inside a
+        # zone. ScheduleAnyway rather than DoNotSchedule so a two-node staging
+        # cluster still schedules instead of leaving a replica Pending.
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: cloudpulse
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: cloudpulse
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5000"
+spec:
+  type: ClusterIP
+  selector:
+    app: cloudpulse
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000
+---
+# Headless Service. clusterIP: None gives every pod a stable DNS record at
+# <pod>.cloudpulse-headless.cloudpulse.svc.cluster.local, so the scheduler and
+# a future leader-election lock can address a specific replica without going
+# through the load-balanced ClusterIP above. publishNotReadyAddresses keeps a
+# starting pod resolvable, which a leader election needs in order to observe
+# the other replicas.
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloudpulse-headless
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5000"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app: cloudpulse
+  ports:
+    - name: http
+      port: 80
+      targetPort: 5000
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: cloudpulse
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: cloudpulse
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloudpulse
+  namespace: cloudpulse
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 2m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - cloudpulse.example.com
+      secretName: cloudpulse-tls
+  rules:
+    - host: cloudpulse.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cloudpulse
+                port:
+                  number: 80
+---
+# Two policies, not one: Kubernetes policies are additive, so a second Ingress
+# rule widens the first rather than replacing it. The deny policy selects the
+# CloudPulse pods with no rules at all, the allow policy adds back exactly what
+# the service needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudpulse-deny
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudpulse
+  policyTypes:
+    - Ingress
+    - Egress
+  # No ingress and no egress rule: deny all, then allow below.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudpulse-allow
+  namespace: cloudpulse
+  labels:
+    app: cloudpulse
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudpulse
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # From the ingress controller. Replace `{}` with a namespaceSelector for
+    # the namespace your nginx ingress lives in, for example
+    #   matchLabels:
+    #     kubernetes.io/metadata.name: ingress-nginx
+    # An empty selector matches every namespace, which is why it is called
+    # out here rather than left to be missed.
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5000
+    # Prometheus scraping /metrics. Narrow this to the monitoring namespace in
+    # a shared cluster.
+    - from:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - protocol: TCP
+          port: 5000
+  egress:
+    # DNS. Without this rule every name lookup inside the pod times out and
+    # the database hostname never resolves.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+    # PostgreSQL. The `- to: namespaceSelector: {}` form applies the port to
+    # every destination, which is what lets this work whether the database is
+    # in-cluster or an out-of-cluster address reached through the endpoint.
+    - ports:
+        - protocol: TCP
+          port: 5432
+      to:
+        - namespaceSelector: {}

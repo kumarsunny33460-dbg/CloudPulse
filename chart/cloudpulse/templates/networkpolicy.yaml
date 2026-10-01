@@ -1,0 +1,92 @@
+{{- if .Values.networkPolicy.enabled -}}
+{{/*
+Two policies rather than one, because Kubernetes policies are additive: adding
+a second Ingress rule does not replace the first.
+
+  cloudpulse-deny    default deny on ingress and egress for the CloudPulse pods
+  cloudpulse-allow   the specific traffic the service needs
+
+There is no third, wider policy, so a pod added outside the selector is
+unaffected and the CloudPulse pods stay reachable only through the Service.
+*/}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}-deny
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+    app: cloudpulse
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cloudpulse.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  # No ingress or egress rules at all: deny everything, then allow below.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}-allow
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+    app: cloudpulse
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "cloudpulse.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Traffic from the ingress controller only.
+    - from:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ingressNamespaceSelector | nindent 12 }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+    # Prometheus scraping /metrics, and any extra selector supplied in values.
+    - from:
+        {{- range .Values.networkPolicy.additionalIngressFrom }}
+        - {{ toYaml . | nindent 10 }}
+        {{- end }}
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.targetPort }}
+  egress:
+    # DNS to the kube-dns Service. Without this rule every name resolution
+    # inside the pod times out.
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+    # The PostgreSQL server.
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.databasePort }}
+      to:
+        {{- range .Values.networkPolicy.egressToSelectors }}
+        - {{ toYaml . | nindent 10 }}
+        {{- end }}
+        - namespaceSelector: {}
+    # Any other explicitly allowed destination, for example the SMTP relay
+    # or the CloudWatch/Pushgateway endpoint.
+    {{- range .Values.networkPolicy.egressCIDRs }}
+    - to:
+        - ipBlock:
+            cidr: {{ . }}
+    {{- end }}
+{{- end }}

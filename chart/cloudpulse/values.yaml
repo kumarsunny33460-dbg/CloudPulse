@@ -1,0 +1,438 @@
+# ==================================================================
+# CloudPulse Helm values
+# ==================================================================
+# Every value below can be overridden on the command line:
+#   helm upgrade --install cloudpulse ./chart/cloudpulse \
+#     --set image.tag=1.2.0 --set autoscaling.maxReplicas=6
+# or with a values file:
+#   helm upgrade --install cloudpulse ./chart/cloudpulse -f my-values.yaml
+# ==================================================================
+
+# Number of CloudPulse pods. The scheduler runs inside the app, so keep this
+# at 1 unless every replica points at the same PostgreSQL database and you
+# accept concurrent monitoring loops. HPA-managed clusters can leave this at
+# the minimum and let autoscaling own the replica count.
+replicaCount: 2
+
+image:
+  # Container image repository. CloudPulse images are published to GHCR.
+  repository: ghcr.io/your-github-username/cloudpulse
+  # Image tag. Defaults to the chart appVersion when left empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Pull an image from a private registry. Leave empty for public images.
+imagePullSecrets: []
+
+# Number of old ReplicaSets kept for rollback.
+revisionHistoryLimit: 3
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Labels and annotations added to every object this chart creates.
+commonLabels: {}
+commonAnnotations: {}
+
+serviceAccount:
+  # Create a dedicated ServiceAccount. Disable only if an operator-managed
+  # ServiceAccount of the same name already exists in the namespace.
+  create: true
+  # Leave empty to use the generated fullname.
+  name: ""
+  # Mount the API token. CloudPulse does not call the Kubernetes API, so this
+  # is false by default and the token is not exposed to the process.
+  automount: false
+  annotations: {}
+
+# ------------------------------------------------------------------
+# Pod placement
+# ------------------------------------------------------------------
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+# Spread replicas across zones and nodes so a single node or AZ failure cannot
+# take the whole monitoring plane down.
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: cloudpulse
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+
+# Spread replicas across zones and nodes so a single node or AZ failure cannot
+# take the whole monitoring plane down. Mirrors the constraints in
+# k8s/base/cloudpulse.yaml. Set to [] to disable.
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: cloudpulse
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: cloudpulse
+        app.kubernetes.io/instance: "{{ .Release.Name }}"
+
+# ------------------------------------------------------------------
+# Networking
+# ------------------------------------------------------------------
+
+service:
+  # ClusterIP for in-cluster traffic. Use LoadBalancer only when there is no
+  # Ingress controller in the cluster.
+  type: ClusterIP
+  # Port the Service listens on.
+  port: 80
+  # Container port traffic is forwarded to.
+  targetPort: 5000
+  appProtocol: http
+  annotations: {}
+  labels: {}
+
+# Headless Service used for stable per-pod DNS, required by the scheduler's
+# leader-election style lookups and useful for StatefulSet migration later.
+headlessService:
+  enabled: true
+  annotations: {}
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: 2m
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  hosts:
+    - host: cloudpulse.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: cloudpulse-tls
+      hosts:
+        - cloudpulse.example.com
+
+networkPolicy:
+  # Render a default-deny ingress policy plus explicit allows.
+  enabled: true
+  # Namespace label selector identifying the ingress controller pods. The
+  # default matches the common nginx-ingress label; adjust for your cluster.
+  ingressNamespaceSelector: {}
+    # matchLabels:
+    #   kubernetes.io/metadata.name: ingress-nginx
+  # Extra pod selectors allowed to reach CloudPulse on the container port.
+  additionalIngressFrom: []
+  # Port the PostgreSQL server listens on, for the egress rule.
+  databasePort: 5432
+  # Allow egress to these pod selectors (a database deployed in-cluster).
+  egressToSelectors: []
+  # Allow egress to these CIDRs, in addition to the cluster and database rules.
+  egressCIDRs: []
+
+# ------------------------------------------------------------------
+# Resources
+# ------------------------------------------------------------------
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Writable scratch space. Required because the root filesystem is read-only.
+tmpVolume:
+  sizeLimit: 256Mi
+  medium: ""
+  # Dedicated emptyDir storage class name, if your cluster requires one.
+  storageClass: ""
+
+# Give the scheduler thread a deterministic memory ceiling.
+javaOpts: ""
+
+# ------------------------------------------------------------------
+# Probes
+#
+# /health/live answers as soon as the process is serving; /health/ready only
+# answers once the database is reachable. Startup is separated out so a slow
+# first connection does not trip the liveness probe and cause a restart loop.
+# ------------------------------------------------------------------
+
+startupProbe:
+  enabled: true
+  path: /health/live
+  initialDelaySeconds: 0
+  periodSeconds: 2
+  timeoutSeconds: 5
+  failureThreshold: 30
+
+livenessProbe:
+  enabled: true
+  path: /health/live
+  initialDelaySeconds: 20
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+readinessProbe:
+  enabled: true
+  path: /health/ready
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+# ------------------------------------------------------------------
+# Application configuration
+#
+# Sensitive values (DATABASE_URL, SECRET_KEY, notification credentials) are
+# never written into the ConfigMap. They are read from an existing Secret
+# through `config.existingSecret`. Set `config.createSecret: true` only for
+# local or demo clusters.
+# ------------------------------------------------------------------
+
+config:
+  # Create a Secret from the values below. Leave false in production and let
+  # External Secrets Operator, Secrets Store CSI or SOPS own the Secret.
+  createSecret: false
+
+  # Name of the pre-created Secret holding the sensitive keys. Required when
+  # createSecret is false.
+  existingSecret: cloudpulse-secrets
+
+  # Non-sensitive application settings, rendered into cloudpulse-config.
+  APP_ENV: production
+  PORT: "5000"
+  HOST: 0.0.0.0
+  LOG_LEVEL: INFO
+  # "json" emits one structured object per line for Loki or Elasticsearch.
+  # Requires LOG_INCLUDE_REQUEST_ID to be meaningful, which is the default.
+  LOG_FORMAT: json
+
+  # Background monitoring scheduler.
+  ENABLE_SCHEDULER: "true"
+  SCHEDULER_TIMEZONE: UTC
+  MONITOR_INTERVAL_SECONDS: "60"
+  MONITOR_DEGRADED_AFTER_CHECKS: "2"
+
+  # Health check history retention, in days.
+  HEALTH_CHECK_TIMEOUT: "5"
+
+  # Automatic incident lifecycle.
+  AUTO_CREATE_INCIDENTS: "true"
+  AUTO_RESOLVE_INCIDENTS: "true"
+
+  # Flask security posture. Keep these on behind TLS.
+  CSRF_PROTECTION_ENABLED: "true"
+  SESSION_COOKIE_SECURE: "true"
+  SESSION_COOKIE_NAME: cloudpulse_session
+  STRICT_ORIGIN_CHECK: "true"
+  # Off by default: the auth templates carry an inline <style> block, which
+  # would need a hash or a nonce under a strict style-src.
+  CSP_ENABLED: "false"
+
+  # Addresses or CIDR ranges whose X-Forwarded-For header is believed. Behind
+  # the Ingress in this chart the peer is the ingress controller, so set this to
+  # the cluster's pod/service CIDR or the controller's namespace range.
+  #
+  # Leave empty when the app is reached directly. The header is client supplied
+  # and trusting it by default would let an attacker claim a new identity per
+  # request, which defeats the login rate limiter.
+  TRUSTED_PROXY_NETWORKS: ""
+
+  # Brute force protection. Counters are per (email, client IP) pair and live in
+  # process memory, so with several replicas the effective limit is this value
+  # multiplied by the replica count. A value of 0 disables the scope.
+  LOGIN_MAX_ATTEMPTS: "5"
+  LOGIN_ATTEMPT_WINDOW_SECONDS: "300"
+  LOGIN_LOCKOUT_SECONDS: "900"
+  REGISTRATION_MAX_ATTEMPTS: "5"
+  PASSWORD_RESET_MAX_ATTEMPTS: "5"
+
+  # Account recovery. Tokens are single use and expire; a new token invalidates
+  # the previous one. REQUIRE_EMAIL_VERIFICATION blocks sign-in until the
+  # address is confirmed.
+  PASSWORD_RESET_TOKEN_TTL_SECONDS: "3600"
+  EMAIL_VERIFICATION_TOKEN_TTL_SECONDS: "86400"
+  REQUIRE_EMAIL_VERIFICATION: "false"
+  MIN_PASSWORD_LENGTH: "8"
+
+  # Retention for the other tables that grow without bound, and how often the
+  # scheduled retention job runs. A value of 0 keeps that table forever.
+  HEALTH_CHECK_RETENTION_DAYS: "30"
+  AUDIT_LOG_RETENTION_DAYS: "180"
+  NOTIFICATION_RETENTION_DAYS: "30"
+  RETENTION_JOB_HOURS: "6"
+
+  # Incident SLA targets, in minutes.
+  SLA_CRITICAL_MINUTES: "30"
+  SLA_HIGH_MINUTES: "120"
+  SLA_MEDIUM_MINUTES: "480"
+  SLA_LOW_MINUTES: "1440"
+
+  # UI paging.
+  DEFAULT_PAGE_SIZE: "25"
+  MAX_PAGE_SIZE: "200"
+
+  # Public address used in password reset and verification links. Leave empty
+  # to build links from the inbound request, which bakes the in-cluster host
+  # name into the email whenever the app sits behind an Ingress.
+  PUBLIC_BASE_URL: ""
+
+  # Which events raise a notification. These are behaviour switches, not
+  # credentials, so they live in the ConfigMap.
+  NOTIFY_ON_INCIDENT_OPEN: "true"
+  NOTIFY_ON_INCIDENT_RESOLVED: "true"
+  NOTIFY_ON_DEPLOYMENT: "true"
+
+  # SMTP connection details. Only the username and password are treated as
+  # credentials; the host, port and envelope addresses are configuration and
+  # are rendered into the ConfigMap. When config.createSecret is false these
+  # still come from your own Secret via config.existingSecret.
+  NOTIFY_SMTP_HOST: ""
+  NOTIFY_SMTP_PORT: "587"
+  NOTIFY_SMTP_USE_TLS: "true"
+  NOTIFY_SMTP_FROM: cloudpulse@localhost
+  NOTIFY_SMTP_TO: ""
+
+  # Secret values used ONLY when config.createSecret is true. With
+  # createSecret false these are ignored and the existingSecret is required.
+  # These are the only keys treated as credentials by the chart.
+  SECRET_KEY: ""
+  DATABASE_URL: ""
+  NOTIFY_WEBHOOK_URL: ""
+  NOTIFY_WEBHOOK_SECRET: ""
+  NOTIFY_SMTP_USER: ""
+  NOTIFY_SMTP_PASSWORD: ""
+
+  # Additional keys appended to the ConfigMap verbatim.
+  extra: {}
+
+  # Whole ConfigMap / Secret content overrides, keyed by object name.
+  # Merged last and wins over everything above.
+  extraConfigMap: {}
+  extraSecret: {}
+
+# Pod-level security context. The pod runs as a non-root UID with no writable
+# root filesystem, so the `restricted` Pod Security Standard is satisfied.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context.
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  privileged: false
+  runAsNonRoot: true
+  runAsUser: 10001
+  capabilities:
+    drop:
+      - ALL
+
+# Additional volumes and mounts.
+extraVolumes: []
+extraVolumeMounts: []
+extraEnv: []
+extraEnvFrom: []
+
+# Command and args override. Leave empty to use the image entrypoint.
+command: []
+args: []
+
+# Extra args appended to the container, for example ["--verbose"].
+extraArgs: []
+
+# Grace period must exceed preStop sleep plus the longest request in flight.
+terminationGracePeriodSeconds: 45
+
+lifecycle:
+  preStop:
+    exec:
+      # Nudge the Service endpoints out of rotation before SIGTERM arrives.
+      command: ["sh", "-c", "sleep 10"]
+
+# ------------------------------------------------------------------
+# Autoscaling
+# ------------------------------------------------------------------
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+  # Extra metrics appended to the HPA spec.
+  extraMetrics: []
+  behavior: {}
+
+# ------------------------------------------------------------------
+# Monitoring
+#
+# Requires the Prometheus Operator CRDs (ServiceMonitor, PrometheusRule).
+# Both are off by default so the chart installs on a plain cluster.
+# ------------------------------------------------------------------
+
+monitoring:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+    scrapeTimeout: 10s
+    # Extra labels so the Prometheus Operator selects these objects. Must
+    # match the `serviceMonitorSelector` of your Prometheus resource.
+    additionalLabels: {}
+    honorLabels: true
+    # Relabelings applied before the scrape. The default keeps the endpoint
+    # scrape and stamps the release so the target is identifiable in the UI.
+    relabelings:
+      - sourceLabels: [__meta_kubernetes_pod_name]
+        targetLabel: pod
+        action: replace
+      - sourceLabels: [__meta_kubernetes_namespace]
+        targetLabel: namespace
+        action: replace
+      - sourceLabels: [__meta_kubernetes_service_name]
+        targetLabel: service
+        action: replace
+    metricRelabelings: []
+    # Attach the scrape target to the metrics endpoint path.
+    path: /metrics
+    # Scheme used to scrape. http unless the pod terminates TLS.
+    scheme: http
+
+  prometheusRule:
+    enabled: true
+    # Extra labels so a ruleSelector-enabled Prometheus picks the rules up.
+    additionalLabels: {}
+    # Namespace the rules are created in. Empty means the release namespace.
+    # Keep them beside the workload so they are removed with the release.
+    namespace: ""
+
+podDisruptionBudget:
+  enabled: true
+  # Either minAvailable or maxUnavailable, not both.
+  minAvailable: 1
+  maxUnavailable: ""
+
+# Extra objects rendered verbatim by this chart.
+extraObjects: []

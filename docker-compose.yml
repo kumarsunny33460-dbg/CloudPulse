@@ -1,0 +1,173 @@
+# CloudPulse local stack: application, database, and the full metrics/logging
+# pipeline. Every service is namespaced to the `cloudpulse` network and none of
+# the observability components are exposed to the host by default.
+#
+# Start everything:      docker compose up -d
+# Start the app only:    docker compose up cloudpulse
+#
+# Grafana      http://localhost:3000  (admin / admin)
+# Prometheus   http://localhost:9090
+# Alertmanager http://localhost:9093
+# Loki         http://localhost:3100
+version: "3.9"
+
+services:
+  cloudpulse:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: cloudpulse:local
+    container_name: cloudpulse
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      APP_ENV: production
+      # APP_ENV=production refuses to boot without a real SECRET_KEY, so the
+      # fallback below is only ever used for a throwaway local stack. Set a
+      # real value in .env for anything you intend to keep.
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env or the environment}
+      DATABASE_URL: postgresql://cloudpulse:cloudpulse@postgres:5432/cloudpulse
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5000}
+      ENABLE_SCHEDULER: "true"
+      MONITOR_INTERVAL_SECONDS: "60"
+      HEALTH_CHECK_RETENTION_DAYS: "30"
+      AUDIT_LOG_RETENTION_DAYS: "180"
+      CSRF_PROTECTION_ENABLED: "true"
+      SESSION_COOKIE_SECURE: "false"
+      # Container platforms collect stdout, so the structured logger writes
+      # JSON to the docker log driver and promtail reads it from the shared
+      # volume. Switch to "text" to read the output with `docker logs`.
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      NOTIFY_WEBHOOK_URL: ${NOTIFY_WEBHOOK_URL:-}
+      NOTIFY_SMTP_HOST: ${NOTIFY_SMTP_HOST:-}
+      NOTIFY_SMTP_TO: ${NOTIFY_SMTP_TO:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://127.0.0.1:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - cloudpulse
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cloudpulse-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cloudpulse
+      POSTGRES_PASSWORD: cloudpulse
+      POSTGRES_DB: cloudpulse
+    volumes:
+      - cloudpulse-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudpulse -d cloudpulse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - cloudpulse
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: cloudpulse-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    depends_on:
+      - alertmanager
+    networks:
+      - cloudpulse
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: cloudpulse-alertmanager
+    restart: unless-stopped
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    networks:
+      - cloudpulse
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: cloudpulse-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Default dashboard and time range for a fresh login.
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/cloudpulse-overview.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - cloudpulse
+
+  loki:
+    image: grafana/loki:3.2.1
+    container_name: cloudpulse-loki
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./monitoring/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - cloudpulse
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    container_name: cloudpulse-promtail
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/loki/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - cloudpulse-logs:/var/log/cloudpulse:ro
+      - promtail-positions:/etc/promtail
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    depends_on:
+      - loki
+    networks:
+      - cloudpulse
+
+networks:
+  cloudpulse:
+    driver: bridge
+
+volumes:
+  cloudpulse-db:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
+  loki-data:
+  promtail-positions:
+  # Shared between cloudpulse and promtail. To actually populate it, either
+  # point the application at a file handler or add a logging sidecar that tails
+  # `docker logs`; promtail reads from here when the file exists and is idle
+  # when it does not.
+  cloudpulse-logs:

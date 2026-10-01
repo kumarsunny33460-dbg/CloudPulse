@@ -1,3432 +1,733 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>CloudPulse | Cloud Monitoring & DevOps</title>
-
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='style.css') }}"
-    >
+    <meta name="description" content="CloudPulse - cloud native application monitoring and incident management">
+    <title>CloudPulse | Monitoring &amp; Incident Management</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 
 <body>
 
-<header class="top-header">
+<div class="app-shell">
 
-    <div class="brand-section">
-        <div class="brand-icon">☁</div>
+    <!-- ================================================== SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
 
-        <div>
-            <h1>CloudPulse</h1>
-            <p>Cloud Monitoring, Incident Management & DevOps</p>
-        </div>
-    </div>
-
-    <div class="header-status">
-        <span class="status-dot"></span>
-        System Monitoring Active
-    </div>
-
-    <div class="user-session" id="userSession">
-
-        <div class="user-info">
-            <strong id="currentUsername">User</strong>
-            <span id="currentUserRole">Viewer</span>
-        </div>
-
-        <a
-            href="/logout"
-            class="logout-btn"
-        >
-            Logout
-        </a>
-
-    </div>
-
-</header>
-
-
-<main class="container">
-
-    <!-- =====================================================
-         SYSTEM STATUS
-    ====================================================== -->
-
-    <section class="status-card" id="systemStatusCard">
-
-        <div>
-            <span class="status-label">SYSTEM STATUS</span>
-
-            <h2 id="systemStatus">
-                Checking system...
-            </h2>
-
-            <p id="systemMessage">
-                CloudPulse is checking your applications.
-            </p>
-        </div>
-
-        <div class="status-indicator" id="statusIndicator">
-            ●
-        </div>
-
-    </section>
-
-
-    <!-- =====================================================
-         SUMMARY
-    ====================================================== -->
-
-    <section class="stats-grid">
-
-        <div class="stat-card">
-            <span class="stat-icon">◉</span>
-
-            <div>
-                <p>Applications</p>
-                <h2 id="totalApplications">0</h2>
+        <div class="brand">
+            <div class="brand-mark" aria-hidden="true">&#9729;</div>
+            <div class="brand-text">
+                <h1>CloudPulse</h1>
+                <span>Observability</span>
             </div>
         </div>
 
-
-        <div class="stat-card healthy-card">
-            <span class="stat-icon">✓</span>
-
-            <div>
-                <p>Healthy</p>
-                <h2 id="healthyApplications">0</h2>
-            </div>
-        </div>
-
-
-        <div class="stat-card unhealthy-card">
-            <span class="stat-icon">!</span>
-
-            <div>
-                <p>Unhealthy</p>
-                <h2 id="unhealthyApplications">0</h2>
-            </div>
-        </div>
-
-
-        <div class="stat-card incident-card">
-            <span class="stat-icon">⚠</span>
-
-            <div>
-                <p>Open Incidents</p>
-                <h2 id="openIncidents">0</h2>
-            </div>
-        </div>
-
-    </section>
-
-
-    <!-- =====================================================
-         APPLICATION MONITORING
-    ====================================================== -->
-
-    <section class="section-card">
-
-        <div class="section-header">
-
-            <div>
-                <span class="section-label">MONITORING</span>
-
-                <h2>Application Monitoring</h2>
-
-                <p>
-                    Monitor application availability, response time
-                    and HTTP status in real time.
-                </p>
-            </div>
-
-            <button
-                class="btn btn-primary"
-                onclick="monitorApplications()"
-            >
-                ↻ Check Now
+        <nav class="nav" aria-label="Primary">
+            <span class="nav-label">Monitor</span>
+            <button type="button" class="nav-item is-active" data-view="overview">
+                <span class="nav-icon" aria-hidden="true">&#9632;</span> Overview
+            </button>
+            <button type="button" class="nav-item" data-view="applications">
+                <span class="nav-icon" aria-hidden="true">&#9673;</span> Applications
+                <span class="nav-badge hidden" id="navAppCount">0</span>
+            </button>
+            <button type="button" class="nav-item" data-view="incidents">
+                <span class="nav-icon" aria-hidden="true">&#9888;</span> Incidents
+                <span class="nav-badge hidden" id="navOpenIncidents">0</span>
             </button>
 
-        </div>
-
-
-        <div id="monitoringContainer" class="monitoring-grid">
-
-            <div class="empty-state">
-                Monitoring applications...
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- =====================================================
-         APPLICATION MANAGEMENT
-    ====================================================== -->
-
-    <section
-        class="section-card admin-only"
-        id="applicationManagementSection"
-    >
-
-        <div class="section-header">
-
-            <div>
-                <span class="section-label">APPLICATION MANAGEMENT</span>
-
-                <h2>Add Application</h2>
-
-                <p>
-                    Register a cloud application for continuous monitoring.
-                </p>
-            </div>
-
-        </div>
-
-
-        <form id="applicationForm">
-
-            <div class="form-grid">
-
-                <div class="form-group">
-
-                    <label for="appName">
-                        Application Name
-                    </label>
-
-                    <input
-                        type="text"
-                        id="appName"
-                        placeholder="Example: Production API"
-                        required
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="appUrl">
-                        Application URL
-                    </label>
-
-                    <input
-                        type="url"
-                        id="appUrl"
-                        placeholder="https://example.com"
-                        required
-                    >
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="appEnvironment">
-                        Environment
-                    </label>
-
-                    <select id="appEnvironment" required>
-
-                        <option value="">
-                            Select environment
-                        </option>
-
-                        <option value="Development">
-                            Development
-                        </option>
-
-                        <option value="Testing">
-                            Testing
-                        </option>
-
-                        <option value="Staging">
-                            Staging
-                        </option>
-
-                        <option value="Production">
-                            Production
-                        </option>
-
-                    </select>
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="appStatus">
-                        Status
-                    </label>
-
-                    <select id="appStatus">
-
-                        <option value="Active">
-                            Active
-                        </option>
-
-                        <option value="Maintenance">
-                            Maintenance
-                        </option>
-
-                        <option value="Inactive">
-                            Inactive
-                        </option>
-
-                    </select>
-
-                </div>
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label for="appDescription">
-                    Description
-                </label>
-
-                <textarea
-                    id="appDescription"
-                    rows="3"
-                    placeholder="Describe the application..."
-                ></textarea>
-
-            </div>
-
-
-            <div class="form-actions">
-
-                <button
-                    type="submit"
-                    class="btn btn-primary"
-                >
-                    + Add Application
-                </button>
-
-            </div>
-
-        </form>
-
-    </section>
-
-
-    <!-- =====================================================
-         REGISTERED APPLICATIONS
-    ====================================================== -->
-
-    <section class="section-card">
-
-        <div class="section-header">
-
-            <div>
-                <span class="section-label">APPLICATIONS</span>
-
-                <h2>Registered Applications</h2>
-
-                <p>
-                    Applications currently registered with CloudPulse.
-                </p>
-            </div>
-
-        </div>
-
-
-        <div
-            id="applicationsContainer"
-            class="applications-grid"
-        >
-
-            <div class="empty-state">
-                Loading applications...
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- =====================================================
-         INCIDENT MANAGEMENT
-    ====================================================== -->
-
-    <section class="section-card">
-
-        <div class="section-header">
-
-            <div>
-                <span class="section-label">INCIDENT MANAGEMENT</span>
-
-                <h2>Cloud Incidents</h2>
-
-                <p>
-                    Monitor application incidents and operational events.
-                </p>
-            </div>
-
-        </div>
-
-
-        <div class="incident-summary">
-
-            <div class="incident-summary-item">
-
-                <span>Total Incidents</span>
-
-                <strong id="totalIncidents">
-                    0
-                </strong>
-
-            </div>
-
-
-            <div class="incident-summary-item">
-
-                <span>Open</span>
-
-                <strong id="incidentOpenCount">
-                    0
-                </strong>
-
-            </div>
-
-
-            <div class="incident-summary-item">
-
-                <span>Resolved</span>
-
-                <strong id="incidentResolvedCount">
-                    0
-                </strong>
-
-            </div>
-
-        </div>
-
-
-        <!-- CREATE INCIDENT -->
-
-        <div
-            class="incident-create-box admin-only"
-            id="incidentCreateSection"
-        >
-
-            <div class="subsection-header">
-
-                <div>
-                    <h3>Report an Incident</h3>
-
-                    <p>
-                        Manually create an operational incident.
-                    </p>
-                </div>
-
-            </div>
-
-
-            <form id="incidentForm">
-
-                <div class="form-grid">
-
-                    <div class="form-group">
-
-                        <label for="incidentApplication">
-                            Application
-                        </label>
-
-                        <select
-                            id="incidentApplication"
-                            required
-                        >
-
-                            <option value="">
-                                Select application
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-                    <div class="form-group">
-
-                        <label for="incidentTitle">
-                            Incident Title
-                        </label>
-
-                        <input
-                            type="text"
-                            id="incidentTitle"
-                            placeholder="Example: API response delay"
-                            required
-                        >
-
-                    </div>
-
-
-                    <div class="form-group">
-
-                        <label for="incidentSeverity">
-                            Severity
-                        </label>
-
-                        <select
-                            id="incidentSeverity"
-                            required
-                        >
-
-                            <option value="Low">
-                                Low
-                            </option>
-
-                            <option value="Medium" selected>
-                                Medium
-                            </option>
-
-                            <option value="High">
-                                High
-                            </option>
-
-                            <option value="Critical">
-                                Critical
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-                    <div class="form-group">
-
-                        <label for="incidentStatus">
-                            Status
-                        </label>
-
-                        <select id="incidentStatus">
-
-                            <option value="Open" selected>
-                                Open
-                            </option>
-
-                            <option value="Resolved">
-                                Resolved
-                            </option>
-
-                        </select>
-
-                    </div>
-
-                </div>
-
-
-                <div class="form-group">
-
-                    <label for="incidentDescription">
-                        Description
-                    </label>
-
-                    <textarea
-                        id="incidentDescription"
-                        rows="4"
-                        placeholder="Describe the incident..."
-                    ></textarea>
-
-                </div>
-
-
-                <div class="form-actions">
-
-                    <button
-                        type="submit"
-                        class="btn btn-danger"
-                    >
-                        + Report Incident
-                    </button>
-
-                </div>
-
-            </form>
-
-        </div>
-
-
-        <div class="subsection-header incident-list-heading">
-
-            <div>
-                <h3>Incident History</h3>
-
-                <p>
-                    Active and resolved incidents recorded by CloudPulse.
-                </p>
-            </div>
-
-        </div>
-
-
-        <div
-            id="incidentsContainer"
-            class="incidents-grid"
-        >
-
-            <div class="empty-state">
-                Loading incidents...
-            </div>
-
-        </div>
-
-    </section>
-
-
-    <!-- =====================================================
-         DAY 3 — DEPLOYMENT MANAGEMENT
-    ====================================================== -->
-
-    <section class="section-card">
-
-        <div class="section-header">
-
-            <div>
-                <span class="section-label">
-                    DEVOPS / DEPLOYMENTS
-                </span>
-
-                <h2>Deployment Management</h2>
-
-                <p>
-                    Track application releases, environments and
-                    deployment status from one cloud dashboard.
-                </p>
-            </div>
-
-        </div>
-
-
-        <!-- DEPLOYMENT SUMMARY -->
-
-        <div class="incident-summary">
-
-            <div class="incident-summary-item">
-
-                <span>Total Deployments</span>
-
-                <strong id="totalDeployments">
-                    0
-                </strong>
-
-            </div>
-
-
-            <div class="incident-summary-item">
-
-                <span>Successful</span>
-
-                <strong id="successfulDeployments">
-                    0
-                </strong>
-
-            </div>
-
-
-            <div class="incident-summary-item">
-
-                <span>Failed</span>
-
-                <strong id="failedDeployments">
-                    0
-                </strong>
-
-            </div>
-
-        </div>
-
-
-        <!-- CREATE DEPLOYMENT -->
-
-        <div
-            class="incident-create-box admin-only"
-            id="deploymentCreateSection"
-        >
-
-            <div class="subsection-header">
-
-                <div>
-                    <h3>Create Deployment</h3>
-
-                    <p>
-                        Record a new application release in CloudPulse.
-                    </p>
-                </div>
-
-            </div>
-
-
-            <form id="deploymentForm">
-
-                <div class="form-grid">
-
-                    <div class="form-group">
-
-                        <label for="deploymentApplication">
-                            Application
-                        </label>
-
-                        <select
-                            id="deploymentApplication"
-                            required
-                        >
-
-                            <option value="">
-                                Select application
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-                    <div class="form-group">
-
-                        <label for="deploymentVersion">
-                            Version / Release
-                        </label>
-
-                        <input
-                            type="text"
-                            id="deploymentVersion"
-                            placeholder="Example: v1.0.0"
-                            required
-                        >
-
-                    </div>
-
-
-                    <div class="form-group">
-
-                        <label for="deploymentEnvironment">
-                            Environment
-                        </label>
-
-                        <select
-                            id="deploymentEnvironment"
-                            required
-                        >
-
-                            <option value="">
-                                Select environment
-                            </option>
-
-                            <option value="Development">
-                                Development
-                            </option>
-
-                            <option value="Testing">
-                                Testing
-                            </option>
-
-                            <option value="Staging">
-                                Staging
-                            </option>
-
-                            <option value="Production">
-                                Production
-                            </option>
-
-                        </select>
-
-                    </div>
-
-
-                    <div class="form-group">
-
-                        <label for="deploymentStatus">
-                            Deployment Status
-                        </label>
-
-                        <select
-                            id="deploymentStatus"
-                            required
-                        >
-
-                            <option value="Successful">
-                                Successful
-                            </option>
-
-                            <option value="In Progress">
-                                In Progress
-                            </option>
-
-                            <option value="Failed">
-                                Failed
-                            </option>
-
-                            <option value="Rolled Back">
-                                Rolled Back
-                            </option>
-
-                        </select>
-
-                    </div>
-
-                </div>
-
-
-                <div class="form-actions">
-
-                    <button
-                        type="submit"
-                        class="btn btn-primary"
-                    >
-                        + Create Deployment
-                    </button>
-
-                </div>
-
-            </form>
-
-        </div>
-
-
-        <!-- DEPLOYMENT HISTORY -->
-
-        <div class="subsection-header incident-list-heading">
-
-            <div>
-                <h3>Deployment History</h3>
-
-                <p>
-                    Release activity recorded for your applications.
-                </p>
-            </div>
-
-        </div>
-
-
-        <div
-            id="deploymentsContainer"
-            class="applications-grid"
-        >
-
-            <div class="empty-state">
-                Loading deployments...
-            </div>
-
-        </div>
-
-    </section>
-
-</main>
-
-
-<!-- =========================================================
-     EDIT APPLICATION MODAL
-========================================================= -->
-
-<div
-    id="editModal"
-    class="modal"
->
-
-    <div class="modal-content">
-
-        <div class="modal-header">
-
-            <div>
-                <span class="section-label">
-                    APPLICATION
-                </span>
-
-                <h2>Edit Application</h2>
-            </div>
-
-            <button
-                class="modal-close"
-                onclick="closeEditModal()"
-                type="button"
-            >
-                ×
+            <span class="nav-label">Delivery</span>
+            <button type="button" class="nav-item" data-view="deployments">
+                <span class="nav-icon" aria-hidden="true">&#8618;</span> Deployments
             </button>
 
+            <span class="nav-label">Insight</span>
+            <button type="button" class="nav-item" data-view="activity">
+                <span class="nav-icon" aria-hidden="true">&#9776;</span> Activity
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-chip">
+                <div class="avatar" id="userAvatar">?</div>
+                <div class="user-chip-text">
+                    <strong id="currentUsername">Loading</strong>
+                    <span id="currentUserRole">Viewer</span>
+                </div>
+            </div>
         </div>
 
+    </aside>
 
-        <form id="editApplicationForm">
+    <!-- ==================================================== MAIN -->
+    <div class="main">
 
-            <input
-                type="hidden"
-                id="editApplicationId"
-            >
+        <header class="topbar">
+            <button type="button" class="btn btn-icon sidebar-toggle" id="sidebarToggle" aria-label="Toggle navigation">&#9776;</button>
 
-
-            <div class="form-group">
-
-                <label for="editAppName">
-                    Application Name
-                </label>
-
-                <input
-                    type="text"
-                    id="editAppName"
-                    required
-                >
-
+            <div class="page-title">
+                <h2 id="pageTitle">Overview</h2>
+                <p id="pageSubtitle">Fleet health at a glance</p>
             </div>
 
-
-            <div class="form-group">
-
-                <label for="editAppUrl">
-                    Application URL
-                </label>
-
-                <input
-                    type="url"
-                    id="editAppUrl"
-                    required
-                >
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label for="editAppEnvironment">
-                    Environment
-                </label>
-
-                <select
-                    id="editAppEnvironment"
-                    required
-                >
-
-                    <option value="Development">
-                        Development
-                    </option>
-
-                    <option value="Testing">
-                        Testing
-                    </option>
-
-                    <option value="Staging">
-                        Staging
-                    </option>
-
-                    <option value="Production">
-                        Production
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label for="editAppStatus">
-                    Status
-                </label>
-
-                <select id="editAppStatus">
-
-                    <option value="Active">
-                        Active
-                    </option>
-
-                    <option value="Maintenance">
-                        Maintenance
-                    </option>
-
-                    <option value="Inactive">
-                        Inactive
-                    </option>
-
-                </select>
-
-            </div>
-
-
-            <div class="form-group">
-
-                <label for="editAppDescription">
-                    Description
-                </label>
-
-                <textarea
-                    id="editAppDescription"
-                    rows="4"
-                ></textarea>
-
-            </div>
-
-
-            <div class="form-actions">
-
-                <button
-                    type="button"
-                    class="btn btn-secondary"
-                    onclick="closeEditModal()"
-                >
-                    Cancel
+            <div class="topbar-actions">
+                <span class="badge" id="liveBadge" title="Auto refresh interval">
+                    <i class="dot dot-pulse"></i> Live
+                </span>
+                <button type="button" class="btn btn-sm" id="refreshBtn">
+                    <span id="refreshIcon">&#8635;</span> Refresh
                 </button>
-
-                <button
-                    type="submit"
-                    class="btn btn-primary"
-                >
-                    Save Changes
-                </button>
-
+                <button type="button" class="btn btn-icon" id="themeToggle" title="Toggle colour theme" aria-label="Toggle colour theme">&#9680;</button>
+                <a class="btn btn-sm" href="{{ url_for('logout') }}">Logout</a>
             </div>
+        </header>
 
-        </form>
+        <main>
 
+            <!-- ============================================ OVERVIEW -->
+            <section class="view is-active" id="view-overview">
+
+                <div class="banner is-info mb-16" id="systemBanner">
+                    <span class="dot"></span>
+                    <div>
+                        <strong id="systemStatus">Checking system status</strong>
+                        <p class="small" id="systemMessage">CloudPulse is collecting the latest health signals.</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-stats mb-16" id="overviewStats">
+                    <div class="stat"><div class="stat-body"><div class="stat-label">Applications</div><div class="stat-value" data-stat="applications">&mdash;</div><div class="stat-hint" data-hint="applications">registered</div></div></div>
+                    <div class="stat is-success"><div class="stat-body"><div class="stat-label">Healthy</div><div class="stat-value" data-stat="healthy">&mdash;</div><div class="stat-hint" data-hint="healthy">responding normally</div></div></div>
+                    <div class="stat is-danger"><div class="stat-body"><div class="stat-label">Unhealthy</div><div class="stat-value" data-stat="unhealthy">&mdash;</div><div class="stat-hint" data-hint="unhealthy">failing checks</div></div></div>
+                    <div class="stat is-warning"><div class="stat-body"><div class="stat-label">Open Incidents</div><div class="stat-value" data-stat="openIncidents">&mdash;</div><div class="stat-hint" data-hint="openIncidents">need attention</div></div></div>
+                    <div class="stat is-info"><div class="stat-body"><div class="stat-label">MTTR</div><div class="stat-value" data-stat="mttr">&mdash;</div><div class="stat-hint" data-hint="mttr">mean time to resolve</div></div></div>
+                    <div class="stat is-success"><div class="stat-body"><div class="stat-label">SLA Compliance</div><div class="stat-value" data-stat="sla">&mdash;</div><div class="stat-hint" data-hint="sla">last 30 days</div></div></div>
+                </div>
+
+                <div class="grid grid-2 mb-16">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Availability &amp; latency</h3>
+                                <p id="timeseriesHint">Health checks and average response time</p>
+                            </div>
+                            <div class="spacer"></div>
+                            <select class="select" id="timeseriesRange" style="width:auto" aria-label="Chart range">
+                                <option value="6">Last 6 hours</option>
+                                <option value="24" selected>Last 24 hours</option>
+                                <option value="72">Last 3 days</option>
+                                <option value="168">Last 7 days</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div id="timeseriesChart"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Fleet health mix</h3>
+                                <p>Current state of every monitored application</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="healthDonut"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-2 mb-16">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Incidents by severity</h3>
+                                <p>Open versus total incidents</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="severityChart"></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Check volume</h3>
+                                <p>Successful and failed health checks per bucket</p>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="volumeChart"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-2">
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Needs attention</h3>
+                                <p>Lowest availability first</p>
+                            </div>
+                            <div class="spacer"></div>
+                            <button type="button" class="btn btn-sm btn-ghost" data-goto="applications">View all</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th>Application</th>
+                                        <th>Environment</th>
+                                        <th>Health</th>
+                                        <th class="numeric">Uptime</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="attentionBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <div>
+                                <h3>Recent activity</h3>
+                                <p>Latest changes across the platform</p>
+                            </div>
+                            <div class="spacer"></div>
+                            <button type="button" class="btn btn-sm btn-ghost" data-goto="activity">View all</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="timeline" id="overviewTimeline"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ======================================== APPLICATIONS -->
+            <section class="view" id="view-applications">
+
+                <div class="grid grid-stats mb-16" id="appStats">
+                    <div class="stat"><div class="stat-body"><div class="stat-label">Total</div><div class="stat-value" data-stat="total">0</div><div class="stat-hint">registered applications</div></div></div>
+                    <div class="stat is-success"><div class="stat-body"><div class="stat-label">Healthy</div><div class="stat-value" data-stat="healthy">0</div><div class="stat-hint">last check passed</div></div></div>
+                    <div class="stat is-warning"><div class="stat-body"><div class="stat-label">Degraded</div><div class="stat-value" data-stat="degraded">0</div><div class="stat-hint">slow responses</div></div></div>
+                    <div class="stat is-danger"><div class="stat-body"><div class="stat-label">Down</div><div class="stat-value" data-stat="down">0</div><div class="stat-hint">failing checks</div></div></div>
+                    <div class="stat is-info"><div class="stat-body"><div class="stat-label">Avg Latency</div><div class="stat-value" data-stat="latency">&mdash;</div><div class="stat-hint">across recent checks</div></div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="search">
+                            <input type="search" class="input" id="appSearch" placeholder="Search name, URL or description" aria-label="Search applications">
+                        </div>
+                        <select class="select" id="appEnvFilter" style="width:auto" aria-label="Filter by environment">
+                            <option value="">All environments</option>
+                        </select>
+                        <select class="select" id="appStatusFilter" style="width:auto" aria-label="Filter by status">
+                            <option value="">All states</option>
+                            <option value="UP">UP</option>
+                            <option value="DEGRADED">DEGRADED</option>
+                            <option value="DOWN">DOWN</option>
+                            <option value="UNKNOWN">Never checked</option>
+                        </select>
+                        <label class="checkbox">
+                            <input type="checkbox" id="appPausedFilter"> Paused only
+                        </label>
+                        <div class="spacer"></div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm" id="appExportBtn">Export CSV</button>
+                            <button type="button" class="btn btn-sm" id="appMonitorBtn">Run all checks</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="appCreateBtn">+ Add application</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="data">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px">
+                                        <input type="checkbox" id="appSelectAll" aria-label="Select all applications">
+                                    </th>
+                                    <th class="sortable" data-sort="name">Application</th>
+                                    <th class="sortable" data-sort="environment">Environment</th>
+                                    <th class="sortable" data-sort="status">State</th>
+                                    <th class="sortable" data-sort="last_health_status">Health</th>
+                                    <th class="numeric sortable" data-sort="last_response_time">Latency</th>
+                                    <th class="numeric sortable" data-sort="uptime_percentage">Uptime</th>
+                                    <th class="numeric">Incidents</th>
+                                    <th class="sortable" data-sort="last_checked_at">Last check</th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="applicationsBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="pagination" id="appPagination"></div>
+                        <div class="spacer"></div>
+                        <span class="subtle small" id="appSelectionHint">No rows selected</span>
+                        <button type="button" class="btn btn-sm btn-danger hidden" id="appBulkPause">Pause selected</button>
+                        <button type="button" class="btn btn-sm btn-danger hidden" id="appBulkDelete">Delete selected</button>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- =========================================== INCIDENTS -->
+            <section class="view" id="view-incidents">
+
+                <div class="grid grid-stats mb-16" id="incidentStats">
+                    <div class="stat is-danger"><div class="stat-body"><div class="stat-label">Open</div><div class="stat-value" data-stat="open">0</div><div class="stat-hint">unresolved incidents</div></div></div>
+                    <div class="stat is-danger"><div class="stat-body"><div class="stat-label">Critical Open</div><div class="stat-value" data-stat="critical">0</div><div class="stat-hint">highest severity</div></div></div>
+                    <div class="stat is-warning"><div class="stat-body"><div class="stat-label">SLA Breached</div><div class="stat-value" data-stat="breached">0</div><div class="stat-hint">past target</div></div></div>
+                    <div class="stat is-info"><div class="stat-body"><div class="stat-label">MTTR</div><div class="stat-value" data-stat="mttr">&mdash;</div><div class="stat-hint">mean time to resolve</div></div></div>
+                    <div class="stat is-success"><div class="stat-body"><div class="stat-label">SLA Compliance</div><div class="stat-value" data-stat="compliance">&mdash;</div><div class="stat-hint">resolved within SLA</div></div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="search">
+                            <input type="search" class="input" id="incidentSearch" placeholder="Search title, description or application" aria-label="Search incidents">
+                        </div>
+                        <select class="select" id="incidentStatusFilter" style="width:auto" aria-label="Filter by status">
+                            <option value="">All statuses</option>
+                        </select>
+                        <select class="select" id="incidentSeverityFilter" style="width:auto" aria-label="Filter by severity">
+                            <option value="">All severities</option>
+                        </select>
+                        <label class="checkbox">
+                            <input type="checkbox" id="incidentOpenOnly"> Open only
+                        </label>
+                        <label class="checkbox">
+                            <input type="checkbox" id="incidentBreachedOnly"> SLA breached
+                        </label>
+                        <div class="spacer"></div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm" id="incidentExportBtn">Export CSV</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="incidentCreateBtn">+ New incident</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="data">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px">
+                                        <input type="checkbox" id="incidentSelectAll" aria-label="Select all incidents">
+                                    </th>
+                                    <th class="sortable" data-sort="severity">Severity</th>
+                                    <th class="sortable" data-sort="title">Incident</th>
+                                    <th class="sortable" data-sort="status">Status</th>
+                                    <th>Assignee</th>
+                                    <th class="sortable" data-sort="detected_at">Detected</th>
+                                    <th class="numeric">Duration</th>
+                                    <th class="numeric">SLA</th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="incidentsBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="pagination" id="incidentPagination"></div>
+                        <div class="spacer"></div>
+                        <button type="button" class="btn btn-sm btn-primary hidden" id="incidentBulkResolve">Resolve selected</button>
+                        <button type="button" class="btn btn-sm btn-danger hidden" id="incidentBulkDelete">Delete selected</button>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- ========================================= DEPLOYMENTS -->
+            <section class="view" id="view-deployments">
+
+                <div class="grid grid-stats mb-16" id="deploymentStats">
+                    <div class="stat"><div class="stat-body"><div class="stat-label">Total</div><div class="stat-value" data-stat="total">0</div><div class="stat-hint">recorded releases</div></div></div>
+                    <div class="stat is-success"><div class="stat-body"><div class="stat-label">Successful</div><div class="stat-value" data-stat="successful">0</div><div class="stat-hint">clean rollouts</div></div></div>
+                    <div class="stat is-danger"><div class="stat-body"><div class="stat-label">Failed</div><div class="stat-value" data-stat="failed">0</div><div class="stat-hint">broken releases</div></div></div>
+                    <div class="stat is-warning"><div class="stat-body"><div class="stat-label">Rolled Back</div><div class="stat-value" data-stat="rolledBack">0</div><div class="stat-hint">reverted</div></div></div>
+                    <div class="stat is-info"><div class="stat-body"><div class="stat-label">Last 30 Days</div><div class="stat-value" data-stat="recent">0</div><div class="stat-hint">deployment activity</div></div></div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="search">
+                            <input type="search" class="input" id="deploymentSearch" placeholder="Search version, commit or application" aria-label="Search deployments">
+                        </div>
+                        <select class="select" id="deploymentEnvFilter" style="width:auto" aria-label="Filter by environment">
+                            <option value="">All environments</option>
+                        </select>
+                        <select class="select" id="deploymentStatusFilter" style="width:auto" aria-label="Filter by status">
+                            <option value="">All statuses</option>
+                        </select>
+                        <div class="spacer"></div>
+                        <div class="btn-group">
+                            <button type="button" class="btn btn-sm" id="deploymentExportBtn">Export CSV</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="deploymentCreateBtn">+ Record deployment</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="data">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" data-sort="version">Version</th>
+                                    <th>Application</th>
+                                    <th class="sortable" data-sort="environment">Environment</th>
+                                    <th class="sortable" data-sort="status">Status</th>
+                                    <th>Commit</th>
+                                    <th>Deployed by</th>
+                                    <th class="numeric">Duration</th>
+                                    <th class="sortable" data-sort="deployed_at">Deployed</th>
+                                    <th class="text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="deploymentsBody"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="card-footer">
+                        <div class="pagination" id="deploymentPagination"></div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- =========================================== ACTIVITY -->
+            <section class="view" id="view-activity">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="search">
+                            <input type="search" class="input" id="activitySearch" placeholder="Search action, actor or summary" aria-label="Search activity">
+                        </div>
+                        <select class="select" id="activityTypeFilter" style="width:auto" aria-label="Filter by entity type">
+                            <option value="">All entities</option>
+                            <option value="application">Applications</option>
+                            <option value="incident">Incidents</option>
+                            <option value="deployment">Deployments</option>
+                            <option value="monitoring">Monitoring</option>
+                        </select>
+                        <div class="spacer"></div>
+                        <button type="button" class="btn btn-sm" id="activityExportBtn">Export CSV</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline" id="activityTimeline"></div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="pagination" id="activityPagination"></div>
+                    </div>
+                </div>
+
+                <!-- Alerting delivery: the outbox proves what was actually sent -->
+                <div class="card" id="notificationsCard">
+                    <div class="card-header">
+                        <h2>Alert delivery</h2>
+                        <div class="spacer"></div>
+                        <select class="select" id="notificationChannelFilter" style="width:auto" aria-label="Filter notifications by channel">
+                            <option value="">All channels</option>
+                            <option value="webhook">Webhook</option>
+                            <option value="email">Email</option>
+                            <option value="log">Log only</option>
+                        </select>
+                        <button type="button" class="btn btn-sm" id="notificationRefreshBtn">Refresh</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-row" id="notificationSummary"></div>
+                        <div class="table-wrap">
+                            <table class="data">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Event</th>
+                                        <th scope="col">Channel</th>
+                                        <th scope="col">Status</th>
+                                        <th scope="col">Attempts</th>
+                                        <th scope="col">When</th>
+                                        <th scope="col"><span class="sr-only">Action</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="notificationTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="pagination" id="notificationPagination"></div>
+                    </div>
+                </div>
+
+                <!-- Stored history volume and the windows the retention job enforces -->
+                <div class="card" id="retentionCard">
+                    <div class="card-header">
+                        <h2>Stored history</h2>
+                        <div class="spacer"></div>
+                        <button type="button" class="btn btn-sm" id="retentionPruneBtn">Prune now</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="stat-row" id="retentionSummary"></div>
+                        <p class="muted" id="retentionPolicyNote"></p>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
     </div>
-
 </div>
 
-
-<!-- =========================================================
-     FOOTER
-========================================================= -->
-
-<footer class="footer">
-
-    <p>
-        CloudPulse — Cloud Monitoring, Incident Management & DevOps
-    </p>
-
-    <span>
-        Developed by <strong>Sunny Kumar</strong>
-    </span>
-
-</footer>
-
-
-<script>
-
-let applications = [];
-let incidents = [];
-let deployments = [];
-
-/*
-============================================================
-CURRENT USER ROLE
-============================================================
-*/
-
-let currentUserRole = "";
-
-
-/*
-============================================================
-UTILITY
-============================================================
-*/
-
-function escapeHtml(value) {
-
-    if (value === null || value === undefined) {
-        return "";
-    }
-
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-
-/*
-============================================================
-ROLE CHECK
-============================================================
-*/
-
-function isAdmin() {
-    return currentUserRole === "Admin";
-}
-
-
-/*
-============================================================
-APPLY ROLE PERMISSIONS
-============================================================
-*/
-
-function applyRolePermissions() {
-
-    const adminElements =
-        document.querySelectorAll(".admin-only");
-
-    adminElements.forEach(element => {
-
-        if (isAdmin()) {
-
-            element.style.display = "";
-
-        } else {
-
-            element.style.display = "none";
-
-        }
-
-    });
-
-}
-
-
-/*
-============================================================
-LOAD CURRENT USER
-============================================================
-*/
-
-async function loadCurrentUser() {
-
-    try {
-
-        const response =
-            await fetch("/api/me");
-
-        if (!response.ok) {
-            return;
-        }
-
-        const data =
-            await response.json();
-
-        if (!data.user) {
-            return;
-        }
-
-        currentUserRole =
-            data.user.role || "Viewer";
-
-
-        const usernameElement =
-            document.getElementById(
-                "currentUsername"
-            );
-
-        const roleElement =
-            document.getElementById(
-                "currentUserRole"
-            );
-
-
-        if (usernameElement) {
-
-            usernameElement.textContent =
-                data.user.username;
-
-        }
-
-
-        if (roleElement) {
-
-            roleElement.textContent =
-                data.user.role;
-
-        }
-
-
-        applyRolePermissions();
-
-    } catch (error) {
-
-        console.error(
-            "Unable to load current user:",
-            error
-        );
-
-    }
-
-}
-
-
-/*
-============================================================
-LOAD APPLICATIONS
-============================================================
-*/
-
-async function loadApplications() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/applications"
-            );
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Failed to load applications"
-            );
-
-        }
-
-        applications =
-            await response.json();
-
-
-        renderApplications();
-
-        populateIncidentApplications();
-
-        populateDeploymentApplications();
-
-    } catch (error) {
-
-        console.error(error);
-
-        document.getElementById(
-            "applicationsContainer"
-        ).innerHTML = `
-            <div class="empty-state">
-                Unable to load applications.
+<!-- ====================================================== MODALS -->
+
+<div class="modal-backdrop" id="appFormModal" role="dialog" aria-modal="true" aria-labelledby="appFormTitle">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <div>
+                <h3 id="appFormTitle">Add application</h3>
+                <p>Register a service that CloudPulse should keep an eye on.</p>
             </div>
-        `;
-
-    }
-
-}
-
-
-/*
-============================================================
-RENDER APPLICATIONS
-============================================================
-*/
-
-function renderApplications() {
-
-    const container =
-        document.getElementById(
-            "applicationsContainer"
-        );
-
-
-    if (!applications.length) {
-
-        container.innerHTML = `
-            <div class="empty-state">
-                No applications registered yet.
-            </div>
-        `;
-
-        return;
-    }
-
-
-    container.innerHTML =
-        applications.map(
-            application => {
-
-                return `
-                    <div class="application-card">
-
-                        <div class="application-card-header">
-
-                            <div>
-
-                                <h3>
-                                    ${escapeHtml(
-                                        application.name
-                                    )}
-                                </h3>
-
-                                <span class="environment-badge">
-                                    ${escapeHtml(
-                                        application.environment
-                                    )}
-                                </span>
-
-                            </div>
-
-                            <span class="app-status">
-                                ${escapeHtml(
-                                    application.status
-                                )}
-                            </span>
-
-                        </div>
-
-
-                        <div class="application-url">
-
-                            <span>URL</span>
-
-                            <a
-                                href="${escapeHtml(
-                                    application.url
-                                )}"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                ${escapeHtml(
-                                    application.url
-                                )}
-                            </a>
-
-                        </div>
-
-
-                        <p class="application-description">
-                            ${
-                                escapeHtml(
-                                    application.description ||
-                                    "No description provided."
-                                )
-                            }
-                        </p>
-
-
-                        ${
-                            isAdmin()
-                                ? `
-                                    <div class="application-actions">
-
-                                        <button
-                                            class="btn btn-secondary"
-                                            onclick="editApplication(${application.id})"
-                                        >
-                                            Edit
-                                        </button>
-
-                                        <button
-                                            class="btn btn-danger-outline"
-                                            onclick="deleteApplication(${application.id})"
-                                        >
-                                            Delete
-                                        </button>
-
-                                    </div>
-                                  `
-                                : ""
-                        }
-
+            <div class="spacer"></div>
+            <button type="button" class="btn btn-icon btn-ghost modal-close" data-close-modal aria-label="Close">&times;</button>
+        </div>
+        <form id="appForm" novalidate>
+            <div class="modal-body">
+                <input type="hidden" id="appIdField">
+                <div class="form-grid">
+                    <div class="field">
+                        <label for="appName">Name</label>
+                        <input class="input" id="appName" name="name" required maxlength="100" placeholder="payments-api">
                     </div>
-                `;
-
-            }
-        ).join("");
-
-}
-
-
-/*
-============================================================
-INCIDENT APPLICATION DROPDOWN
-============================================================
-*/
-
-function populateIncidentApplications() {
-
-    const select =
-        document.getElementById(
-            "incidentApplication"
-        );
-
-    const currentValue =
-        select.value;
-
-
-    select.innerHTML = `
-        <option value="">
-            Select application
-        </option>
-    `;
-
-
-    applications.forEach(
-        application => {
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-            option.value =
-                application.id;
-
-            option.textContent =
-                `${application.name} — ${application.environment}`;
-
-            select.appendChild(
-                option
-            );
-
-        }
-    );
-
-
-    if (currentValue) {
-
-        select.value =
-            currentValue;
-
-    }
-
-}
-
-
-/*
-============================================================
-DEPLOYMENT APPLICATION DROPDOWN
-============================================================
-*/
-
-function populateDeploymentApplications() {
-
-    const select =
-        document.getElementById(
-            "deploymentApplication"
-        );
-
-    const currentValue =
-        select.value;
-
-
-    select.innerHTML = `
-        <option value="">
-            Select application
-        </option>
-    `;
-
-
-    applications.forEach(
-        application => {
-
-            const option =
-                document.createElement(
-                    "option"
-                );
-
-            option.value =
-                application.id;
-
-            option.textContent =
-                `${application.name} — ${application.environment}`;
-
-            select.appendChild(
-                option
-            );
-
-        }
-    );
-
-
-    if (currentValue) {
-
-        select.value =
-            currentValue;
-
-    }
-
-}
-
-
-/*
-============================================================
-ADD APPLICATION
-============================================================
-*/
-
-document.getElementById(
-    "applicationForm"
-).addEventListener(
-    "submit",
-    async function(event) {
-
-        event.preventDefault();
-
-
-        if (!isAdmin()) {
-
-            alert(
-                "Admin access required."
-            );
-
-            return;
-        }
-
-
-        const applicationData = {
-
-            name:
-                document.getElementById(
-                    "appName"
-                ).value.trim(),
-
-            url:
-                document.getElementById(
-                    "appUrl"
-                ).value.trim(),
-
-            environment:
-                document.getElementById(
-                    "appEnvironment"
-                ).value,
-
-            status:
-                document.getElementById(
-                    "appStatus"
-                ).value,
-
-            description:
-                document.getElementById(
-                    "appDescription"
-                ).value.trim()
-
-        };
-
-
-        try {
-
-            const response =
-                await fetch(
-                    "/api/applications",
-                    {
-                        method: "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify(
-                                applicationData
-                            )
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                alert(
-                    data.error ||
-                    "Failed to create application."
-                );
-
-                return;
-            }
-
-
-            alert(
-                "Application added successfully."
-            );
-
-
-            this.reset();
-
-
-            await loadApplications();
-
-            await monitorApplications();
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                "Unable to connect to CloudPulse."
-            );
-
-        }
-
-    }
-);
-
-
-/*
-============================================================
-DELETE APPLICATION
-============================================================
-*/
-
-async function deleteApplication(id) {
-
-    if (!isAdmin()) {
-
-        alert(
-            "Admin access required."
-        );
-
-        return;
-    }
-
-
-    const confirmed =
-        confirm(
-            "Are you sure you want to delete this application?"
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/applications/${id}`,
-                {
-                    method: "DELETE"
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            alert(
-                data.error ||
-                "Failed to delete application."
-            );
-
-            return;
-        }
-
-
-        alert(
-            "Application deleted successfully."
-        );
-
-
-        await loadApplications();
-
-        await loadIncidents();
-
-        await loadDeployments();
-
-        await monitorApplications();
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            "Unable to delete application."
-        );
-
-    }
-
-}
-
-
-/*
-============================================================
-EDIT APPLICATION
-============================================================
-*/
-
-function editApplication(id) {
-
-    if (!isAdmin()) {
-
-        alert(
-            "Admin access required."
-        );
-
-        return;
-    }
-
-
-    const application =
-        applications.find(
-            item => item.id === id
-        );
-
-
-    if (!application) {
-
-        alert(
-            "Application not found."
-        );
-
-        return;
-    }
-
-
-    document.getElementById(
-        "editApplicationId"
-    ).value =
-        application.id;
-
-
-    document.getElementById(
-        "editAppName"
-    ).value =
-        application.name || "";
-
-
-    document.getElementById(
-        "editAppUrl"
-    ).value =
-        application.url || "";
-
-
-    document.getElementById(
-        "editAppEnvironment"
-    ).value =
-        application.environment ||
-        "Development";
-
-
-    document.getElementById(
-        "editAppStatus"
-    ).value =
-        application.status ||
-        "Active";
-
-
-    document.getElementById(
-        "editAppDescription"
-    ).value =
-        application.description || "";
-
-
-    const modal =
-        document.getElementById(
-            "editModal"
-        );
-
-
-    modal.classList.add(
-        "active"
-    );
-
-
-    modal.style.display =
-        "flex";
-}
-
-
-/*
-============================================================
-CLOSE EDIT MODAL
-============================================================
-*/
-
-function closeEditModal() {
-
-    const modal =
-        document.getElementById(
-            "editModal"
-        );
-
-
-    modal.classList.remove(
-        "active"
-    );
-
-
-    modal.style.display =
-        "none";
-}
-
-
-/*
-============================================================
-UPDATE APPLICATION
-============================================================
-*/
-
-document.getElementById(
-    "editApplicationForm"
-).addEventListener(
-    "submit",
-    async function(event) {
-
-        event.preventDefault();
-
-
-        if (!isAdmin()) {
-
-            alert(
-                "Admin access required."
-            );
-
-            closeEditModal();
-
-            return;
-        }
-
-
-        const id =
-            document.getElementById(
-                "editApplicationId"
-            ).value;
-
-
-        const applicationData = {
-
-            name:
-                document.getElementById(
-                    "editAppName"
-                ).value.trim(),
-
-            url:
-                document.getElementById(
-                    "editAppUrl"
-                ).value.trim(),
-
-            environment:
-                document.getElementById(
-                    "editAppEnvironment"
-                ).value,
-
-            status:
-                document.getElementById(
-                    "editAppStatus"
-                ).value,
-
-            description:
-                document.getElementById(
-                    "editAppDescription"
-                ).value.trim()
-
-        };
-
-
-        try {
-
-            const response =
-                await fetch(
-                    `/api/applications/${id}`,
-                    {
-                        method: "PUT",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify(
-                                applicationData
-                            )
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                alert(
-                    data.error ||
-                    "Failed to update application."
-                );
-
-                return;
-            }
-
-
-            alert(
-                "Application updated successfully."
-            );
-
-
-            closeEditModal();
-
-
-            await loadApplications();
-
-            await monitorApplications();
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                "Unable to update application."
-            );
-
-        }
-
-    }
-);
-
-
-/*
-============================================================
-MONITOR APPLICATIONS
-============================================================
-*/
-
-async function monitorApplications() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/monitor"
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Monitoring request failed"
-            );
-
-        }
-
-
-        const data =
-            await response.json();
-
-
-        updateSystemStatus(
-            data.summary
-        );
-
-
-        document.getElementById(
-            "totalApplications"
-        ).textContent =
-            data.summary.total;
-
-
-        document.getElementById(
-            "healthyApplications"
-        ).textContent =
-            data.summary.healthy;
-
-
-        document.getElementById(
-            "unhealthyApplications"
-        ).textContent =
-            data.summary.unhealthy;
-
-
-        document.getElementById(
-            "openIncidents"
-        ).textContent =
-            data.summary.open_incidents;
-
-
-        renderMonitoring(
-            data.applications
-        );
-
-
-        await loadIncidents();
-
-    } catch (error) {
-
-        console.error(error);
-
-        document.getElementById(
-            "systemStatus"
-        ).textContent =
-            "Monitoring Error";
-
-
-        document.getElementById(
-            "systemMessage"
-        ).textContent =
-            "Unable to connect to the monitoring service.";
-
-    }
-
-}
-
-
-/*
-============================================================
-SYSTEM STATUS
-============================================================
-*/
-
-function updateSystemStatus(summary) {
-
-    const statusElement =
-        document.getElementById(
-            "systemStatus"
-        );
-
-
-    const messageElement =
-        document.getElementById(
-            "systemMessage"
-        );
-
-
-    if (summary.unhealthy === 0) {
-
-        statusElement.textContent =
-            "All Systems Operational";
-
-
-        messageElement.textContent =
-            "All registered applications are currently healthy.";
-
-    } else {
-
-        statusElement.textContent =
-            "Attention Required";
-
-
-        messageElement.textContent =
-            `${summary.unhealthy} application(s) are currently unhealthy.`;
-
-    }
-
-}
-
-
-/*
-============================================================
-RENDER MONITORING
-============================================================
-*/
-
-function renderMonitoring(results) {
-
-    const container =
-        document.getElementById(
-            "monitoringContainer"
-        );
-
-
-    if (!results.length) {
-
-        container.innerHTML = `
-            <div class="empty-state">
-                No applications available for monitoring.
-            </div>
-        `;
-
-        return;
-    }
-
-
-    container.innerHTML =
-        results.map(
-            result => {
-
-                const isUp =
-                    result.health === "UP";
-
-
-                return `
-                    <div class="monitor-card">
-
-                        <div class="monitor-header">
-
-                            <div>
-
-                                <h3>
-                                    ${escapeHtml(
-                                        result.name
-                                    )}
-                                </h3>
-
-                                <span>
-                                    ${escapeHtml(
-                                        result.environment
-                                    )}
-                                </span>
-
-                            </div>
-
-
-                            <span class="${
-                                isUp
-                                    ? "health-up"
-                                    : "health-down"
-                            }">
-
-                                ${isUp
-                                    ? "● UP"
-                                    : "● DOWN"
-                                }
-
-                            </span>
-
-                        </div>
-
-
-                        <div class="monitor-details">
-
-                            <div>
-
-                                <span>Response Time</span>
-
-                                <strong>
-                                    ${
-                                        result.response_time_ms !== null
-                                            ? result.response_time_ms + " ms"
-                                            : "N/A"
-                                    }
-                                </strong>
-
-                            </div>
-
-
-                            <div>
-
-                                <span>HTTP Status</span>
-
-                                <strong>
-                                    ${
-                                        result.http_status !== null
-                                            ? result.http_status
-                                            : "N/A"
-                                    }
-                                </strong>
-
-                            </div>
-
-                        </div>
-
-
-                        <p class="monitor-message">
-                            ${escapeHtml(
-                                result.message
-                            )}
-                        </p>
-
+                    <div class="field span-2">
+                        <label for="appUrl">URL</label>
+                        <input class="input" id="appUrl" name="url" required placeholder="https://api.example.com/health">
+                        <span class="hint">Must start with http:// or https://</span>
                     </div>
-                `;
-
-            }
-        ).join("");
-
-}
-
-
-/*
-============================================================
-LOAD INCIDENTS
-============================================================
-*/
-
-async function loadIncidents() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/incidents"
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Failed to load incidents"
-            );
-
-        }
-
-
-        incidents =
-            await response.json();
-
-
-        updateIncidentSummary();
-
-        renderIncidents();
-
-    } catch (error) {
-
-        console.error(error);
-
-        document.getElementById(
-            "incidentsContainer"
-        ).innerHTML = `
-            <div class="empty-state">
-                Unable to load incidents.
-            </div>
-        `;
-
-    }
-
-}
-
-
-/*
-============================================================
-INCIDENT SUMMARY
-============================================================
-*/
-
-function updateIncidentSummary() {
-
-    const total =
-        incidents.length;
-
-
-    const open =
-        incidents.filter(
-            incident =>
-                incident.status === "Open"
-        ).length;
-
-
-    const resolved =
-        incidents.filter(
-            incident =>
-                incident.status === "Resolved"
-        ).length;
-
-
-    document.getElementById(
-        "totalIncidents"
-    ).textContent =
-        total;
-
-
-    document.getElementById(
-        "incidentOpenCount"
-    ).textContent =
-        open;
-
-
-    document.getElementById(
-        "incidentResolvedCount"
-    ).textContent =
-        resolved;
-
-
-    document.getElementById(
-        "openIncidents"
-    ).textContent =
-        open;
-
-}
-
-
-/*
-============================================================
-RENDER INCIDENTS
-============================================================
-*/
-
-function renderIncidents() {
-
-    const container =
-        document.getElementById(
-            "incidentsContainer"
-        );
-
-
-    if (!incidents.length) {
-
-        container.innerHTML = `
-            <div class="empty-state">
-                No incidents recorded.
-            </div>
-        `;
-
-        return;
-    }
-
-
-    container.innerHTML =
-        incidents.map(
-            incident => {
-
-                const isOpen =
-                    incident.status === "Open";
-
-
-                return `
-                    <div class="incident-item">
-
-                        <div class="incident-header">
-
-                            <div>
-
-                                <h3>
-                                    ${escapeHtml(
-                                        incident.title
-                                    )}
-                                </h3>
-
-                                <p class="incident-application">
-
-                                    Application:
-
-                                    <strong>
-                                        ${
-                                            escapeHtml(
-                                                incident.application_name ||
-                                                "Unknown"
-                                            )
-                                        }
-                                    </strong>
-
-                                </p>
-
-                            </div>
-
-
-                            <div class="incident-badges">
-
-                                <span class="severity-badge">
-                                    ${escapeHtml(
-                                        incident.severity
-                                    )}
-                                </span>
-
-
-                                <span class="${
-                                    isOpen
-                                        ? "health-down"
-                                        : "health-up"
-                                }">
-
-                                    ${
-                                        isOpen
-                                            ? "OPEN"
-                                            : "RESOLVED"
-                                    }
-
-                                </span>
-
-                            </div>
-
-                        </div>
-
-
-                        <div class="incident-body">
-
-                            <p>
-                                ${
-                                    escapeHtml(
-                                        incident.description ||
-                                        "No incident description provided."
-                                    )
-                                }
-                            </p>
-
-                        </div>
-
-
-                        <div class="incident-meta">
-
-                            <span>
-                                Created:
-                                ${
-                                    incident.created_at
-                                        ? new Date(
-                                            incident.created_at
-                                        ).toLocaleString()
-                                        : "N/A"
-                                }
-                            </span>
-
-
-                            ${
-                                incident.resolved_at
-                                    ? `
-                                        <span>
-                                            Resolved:
-                                            ${
-                                                new Date(
-                                                    incident.resolved_at
-                                                ).toLocaleString()
-                                            }
-                                        </span>
-                                      `
-                                    : ""
-                            }
-
-                        </div>
-
-
-                        ${
-                            isAdmin()
-                                ? `
-                                    <div class="incident-actions">
-
-                                        ${
-                                            isOpen
-                                                ? `
-                                                    <button
-                                                        class="btn btn-primary"
-                                                        onclick="resolveIncident(${incident.id})"
-                                                    >
-                                                        ✓ Resolve
-                                                    </button>
-                                                  `
-                                                : ""
-                                        }
-
-
-                                        <button
-                                            class="btn btn-danger-outline"
-                                            onclick="deleteIncident(${incident.id})"
-                                        >
-                                            Delete
-                                        </button>
-
-                                    </div>
-                                  `
-                                : ""
-                        }
-
+                    <div class="field">
+                        <label for="appEnvironment">Environment</label>
+                        <select class="select" id="appEnvironment" name="environment"></select>
                     </div>
-                `;
-
-            }
-        ).join("");
-
-}
-
-
-/*
-============================================================
-CREATE INCIDENT
-============================================================
-*/
-
-document.getElementById(
-    "incidentForm"
-).addEventListener(
-    "submit",
-    async function(event) {
-
-        event.preventDefault();
-
-
-        if (!isAdmin()) {
-
-            alert(
-                "Admin access required."
-            );
-
-            return;
-        }
-
-
-        const applicationId =
-            document.getElementById(
-                "incidentApplication"
-            ).value;
-
-
-        const incidentData = {
-
-            application_id:
-                Number(applicationId),
-
-            title:
-                document.getElementById(
-                    "incidentTitle"
-                ).value.trim(),
-
-            description:
-                document.getElementById(
-                    "incidentDescription"
-                ).value.trim(),
-
-            severity:
-                document.getElementById(
-                    "incidentSeverity"
-                ).value,
-
-            status:
-                document.getElementById(
-                    "incidentStatus"
-                ).value
-
-        };
-
-
-        if (!applicationId) {
-
-            alert(
-                "Please select an application."
-            );
-
-            return;
-        }
-
-
-        try {
-
-            const response =
-                await fetch(
-                    "/api/incidents",
-                    {
-                        method: "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify(
-                                incidentData
-                            )
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                alert(
-                    data.error ||
-                    "Failed to create incident."
-                );
-
-                return;
-            }
-
-
-            alert(
-                "Incident created successfully."
-            );
-
-
-            this.reset();
-
-
-            document.getElementById(
-                "incidentSeverity"
-            ).value =
-                "Medium";
-
-
-            document.getElementById(
-                "incidentStatus"
-            ).value =
-                "Open";
-
-
-            await loadIncidents();
-
-            await monitorApplications();
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                "Unable to create incident."
-            );
-
-        }
-
-    }
-);
-
-
-/*
-============================================================
-RESOLVE INCIDENT
-============================================================
-*/
-
-async function resolveIncident(id) {
-
-    if (!isAdmin()) {
-
-        alert(
-            "Admin access required."
-        );
-
-        return;
-    }
-
-
-    const confirmed =
-        confirm(
-            "Mark this incident as resolved?"
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/incidents/${id}/resolve`,
-                {
-                    method: "PUT"
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            alert(
-                data.error ||
-                "Failed to resolve incident."
-            );
-
-            return;
-        }
-
-
-        alert(
-            "Incident resolved successfully."
-        );
-
-
-        await loadIncidents();
-
-        await monitorApplications();
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            "Unable to resolve incident."
-        );
-
-    }
-
-}
-
-
-/*
-============================================================
-DELETE INCIDENT
-============================================================
-*/
-
-async function deleteIncident(id) {
-
-    if (!isAdmin()) {
-
-        alert(
-            "Admin access required."
-        );
-
-        return;
-    }
-
-
-    const confirmed =
-        confirm(
-            "Are you sure you want to delete this incident?"
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/incidents/${id}`,
-                {
-                    method: "DELETE"
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            alert(
-                data.error ||
-                "Failed to delete incident."
-            );
-
-            return;
-        }
-
-
-        alert(
-            "Incident deleted successfully."
-        );
-
-
-        await loadIncidents();
-
-        await monitorApplications();
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            "Unable to delete incident."
-        );
-
-    }
-
-}
-
-
-/*
-============================================================
-LOAD DEPLOYMENTS
-============================================================
-*/
-
-async function loadDeployments() {
-
-    try {
-
-        const response =
-            await fetch(
-                "/api/deployments"
-            );
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                "Failed to load deployments"
-            );
-
-        }
-
-
-        deployments =
-            await response.json();
-
-
-        updateDeploymentSummary();
-
-        renderDeployments();
-
-    } catch (error) {
-
-        console.error(error);
-
-        document.getElementById(
-            "deploymentsContainer"
-        ).innerHTML = `
-            <div class="empty-state">
-                Unable to load deployments.
-            </div>
-        `;
-
-    }
-
-}
-
-
-/*
-============================================================
-DEPLOYMENT SUMMARY
-============================================================
-*/
-
-function updateDeploymentSummary() {
-
-    const total =
-        deployments.length;
-
-
-    const successful =
-        deployments.filter(
-            deployment =>
-                deployment.status === "Successful"
-        ).length;
-
-
-    const failed =
-        deployments.filter(
-            deployment =>
-                deployment.status === "Failed"
-        ).length;
-
-
-    document.getElementById(
-        "totalDeployments"
-    ).textContent =
-        total;
-
-
-    document.getElementById(
-        "successfulDeployments"
-    ).textContent =
-        successful;
-
-
-    document.getElementById(
-        "failedDeployments"
-    ).textContent =
-        failed;
-
-}
-
-
-/*
-============================================================
-RENDER DEPLOYMENTS
-============================================================
-*/
-
-function renderDeployments() {
-
-    const container =
-        document.getElementById(
-            "deploymentsContainer"
-        );
-
-
-    if (!deployments.length) {
-
-        container.innerHTML = `
-            <div class="empty-state">
-                No deployments recorded yet.
-            </div>
-        `;
-
-        return;
-    }
-
-
-    container.innerHTML =
-        deployments.map(
-            deployment => {
-
-                let statusClass =
-                    "health-up";
-
-
-                if (
-                    deployment.status === "Failed" ||
-                    deployment.status === "Rolled Back"
-                ) {
-
-                    statusClass =
-                        "health-down";
-
-                }
-
-
-                return `
-                    <div class="application-card">
-
-                        <div class="application-card-header">
-
-                            <div>
-
-                                <h3>
-                                    ${escapeHtml(
-                                        deployment.application_name ||
-                                        "Unknown Application"
-                                    )}
-                                </h3>
-
-                                <span class="environment-badge">
-                                    ${escapeHtml(
-                                        deployment.environment
-                                    )}
-                                </span>
-
-                            </div>
-
-
-                            <span class="${statusClass}">
-                                ${escapeHtml(
-                                    deployment.status
-                                )}
-                            </span>
-
-                        </div>
-
-
-                        <div class="monitor-details">
-
-                            <div>
-
-                                <span>Version</span>
-
-                                <strong>
-                                    ${escapeHtml(
-                                        deployment.version
-                                    )}
-                                </strong>
-
-                            </div>
-
-
-                            <div>
-
-                                <span>Deployment ID</span>
-
-                                <strong>
-                                    #${deployment.id}
-                                </strong>
-
-                            </div>
-
-                        </div>
-
-
-                        <div class="application-url">
-
-                            <span>Deployed At</span>
-
-                            <strong>
-                                ${
-                                    deployment.deployed_at
-                                        ? new Date(
-                                            deployment.deployed_at
-                                        ).toLocaleString()
-                                        : "N/A"
-                                }
-                            </strong>
-
-                        </div>
-
-
-                        ${
-                            isAdmin()
-                                ? `
-                                    <div class="application-actions">
-
-                                        <button
-                                            class="btn btn-secondary"
-                                            onclick="editDeployment(${deployment.id})"
-                                        >
-                                            Edit
-                                        </button>
-
-                                        <button
-                                            class="btn btn-danger-outline"
-                                            onclick="deleteDeployment(${deployment.id})"
-                                        >
-                                            Delete
-                                        </button>
-
-                                    </div>
-                                  `
-                                : ""
-                        }
-
+                    <div class="field">
+                        <label for="appStatus">Lifecycle state</label>
+                        <select class="select" id="appStatus" name="status"></select>
                     </div>
-                `;
-
-            }
-        ).join("");
-
-}
-
-
-/*
-============================================================
-CREATE DEPLOYMENT
-============================================================
-*/
-
-document.getElementById(
-    "deploymentForm"
-).addEventListener(
-    "submit",
-    async function(event) {
-
-        event.preventDefault();
-
-
-        if (!isAdmin()) {
-
-            alert(
-                "Admin access required."
-            );
-
-            return;
-        }
-
-
-        const applicationId =
-            document.getElementById(
-                "deploymentApplication"
-            ).value;
-
-
-        const version =
-            document.getElementById(
-                "deploymentVersion"
-            ).value.trim();
-
-
-        const environment =
-            document.getElementById(
-                "deploymentEnvironment"
-            ).value;
-
-
-        const status =
-            document.getElementById(
-                "deploymentStatus"
-            ).value;
-
-
-        if (!applicationId) {
-
-            alert(
-                "Please select an application."
-            );
-
-            return;
-        }
-
-
-        if (!version) {
-
-            alert(
-                "Please enter a version."
-            );
-
-            return;
-        }
-
-
-        if (!environment) {
-
-            alert(
-                "Please select an environment."
-            );
-
-            return;
-        }
-
-
-        const deploymentData = {
-
-            application_id:
-                Number(applicationId),
-
-            version:
-                version,
-
-            environment:
-                environment,
-
-            status:
-                status
-
-        };
-
-
-        try {
-
-            const response =
-                await fetch(
-                    "/api/deployments",
-                    {
-                        method: "POST",
-
-                        headers: {
-                            "Content-Type":
-                                "application/json"
-                        },
-
-                        body:
-                            JSON.stringify(
-                                deploymentData
-                            )
-                    }
-                );
-
-
-            const data =
-                await response.json();
-
-
-            if (!response.ok) {
-
-                alert(
-                    data.error ||
-                    "Failed to create deployment."
-                );
-
-                return;
-            }
-
-
-            alert(
-                "Deployment created successfully."
-            );
-
-
-            this.reset();
-
-
-            document.getElementById(
-                "deploymentStatus"
-            ).value =
-                "Successful";
-
-
-            await loadDeployments();
-
-        } catch (error) {
-
-            console.error(error);
-
-            alert(
-                "Unable to create deployment."
-            );
-
-        }
-
-    }
-);
-
-
-/*
-============================================================
-EDIT DEPLOYMENT
-============================================================
-*/
-
-async function editDeployment(id) {
-
-    if (!isAdmin()) {
-
-        alert(
-            "Admin access required."
-        );
-
-        return;
-    }
-
-
-    const deployment =
-        deployments.find(
-            item => item.id === id
-        );
-
-
-    if (!deployment) {
-        return;
-    }
-
-
-    const newVersion =
-        prompt(
-            "Enter deployment version:",
-            deployment.version
-        );
-
-
-    if (newVersion === null) {
-        return;
-    }
-
-
-    const version =
-        newVersion.trim();
-
-
-    if (!version) {
-
-        alert(
-            "Version cannot be empty."
-        );
-
-        return;
-    }
-
-
-    const newStatus =
-        prompt(
-            "Enter status: Successful, Failed, In Progress, or Rolled Back",
-            deployment.status
-        );
-
-
-    if (newStatus === null) {
-        return;
-    }
-
-
-    const allowedStatuses = [
-        "Successful",
-        "Failed",
-        "In Progress",
-        "Rolled Back"
-    ];
-
-
-    if (!allowedStatuses.includes(newStatus)) {
-
-        alert(
-            "Invalid deployment status."
-        );
-
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/deployments/${id}`,
-                {
-                    method: "PUT",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-
-                    body:
-                        JSON.stringify({
-                            version:
-                                version,
-
-                            status:
-                                newStatus
-                        })
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            alert(
-                data.error ||
-                "Failed to update deployment."
-            );
-
-            return;
-        }
-
-
-        alert(
-            "Deployment updated successfully."
-        );
-
-
-        await loadDeployments();
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            "Unable to update deployment."
-        );
-
-    }
-
-}
-
-
-/*
-============================================================
-DELETE DEPLOYMENT
-============================================================
-*/
-
-async function deleteDeployment(id) {
-
-    if (!isAdmin()) {
-
-        alert(
-            "Admin access required."
-        );
-
-        return;
-    }
-
-
-    const confirmed =
-        confirm(
-            "Are you sure you want to delete this deployment?"
-        );
-
-
-    if (!confirmed) {
-        return;
-    }
-
-
-    try {
-
-        const response =
-            await fetch(
-                `/api/deployments/${id}`,
-                {
-                    method: "DELETE"
-                }
-            );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            alert(
-                data.error ||
-                "Failed to delete deployment."
-            );
-
-            return;
-        }
-
-
-        alert(
-            "Deployment deleted successfully."
-        );
-
-
-        await loadDeployments();
-
-    } catch (error) {
-
-        console.error(error);
-
-        alert(
-            "Unable to delete deployment."
-        );
-
-    }
-
-}
-
-
-/*
-============================================================
-MODAL EVENTS
-============================================================
-*/
-
-const editModal =
-    document.getElementById(
-        "editModal"
-    );
-
-
-editModal.addEventListener(
-    "click",
-    function(event) {
-
-        if (event.target === editModal) {
-
-            closeEditModal();
-
-        }
-
-    }
-);
-
-
-document.addEventListener(
-    "keydown",
-    function(event) {
-
-        if (event.key === "Escape") {
-
-            closeEditModal();
-
-        }
-
-    }
-);
-
-
-/*
-============================================================
-INITIALIZE DASHBOARD
-============================================================
-*/
-
-async function initializeDashboard() {
-
-    /*
-    Load the user FIRST so role permissions are known
-    before management buttons/forms are rendered.
-    */
-
-    await loadCurrentUser();
-
-
-    await loadApplications();
-
-
-    await monitorApplications();
-
-
-    await loadIncidents();
-
-
-    await loadDeployments();
-
-
-    /*
-    Re-apply permissions after all dynamic content
-    has been rendered.
-    */
-
-    applyRolePermissions();
-
-}
-
-
-/*
-============================================================
-INITIAL LOAD
-============================================================
-*/
-
-initializeDashboard();
-
-
-/*
-============================================================
-AUTOMATIC MONITORING
-============================================================
-*/
-
-setInterval(
-    monitorApplications,
-    30000
-);
-
-</script>
+                    <div class="field span-2">
+                        <label for="appDescription">Description</label>
+                        <textarea class="textarea" id="appDescription" name="description" placeholder="What does this service do? Who owns it?"></textarea>
+                    </div>
+
+                    <details class="optional-fields span-2" id="appAdvancedFields">
+                        <summary>Advanced monitoring options</summary>
+                        <div class="optional-fields-body">
+                            <div class="field">
+                                <label for="appMethod">HTTP method</label>
+                                <select class="select" id="appMethod" name="http_method"></select>
+                            </div>
+                            <div class="field">
+                                <label for="appTimeout">Timeout (seconds)</label>
+                                <input class="input" type="number" id="appTimeout" name="timeout_seconds" min="1" max="60" value="5">
+                            </div>
+                            <div class="field">
+                                <label for="appInterval">Check interval (seconds)</label>
+                                <input class="input" type="number" id="appInterval" name="check_interval_seconds" min="15" max="86400" value="60">
+                            </div>
+                            <div class="field">
+                                <label for="appExpected">Accepted status codes</label>
+                                <input class="input" id="appExpected" name="expected_status_codes" value="200-399" placeholder="200-399, 404">
+                                <span class="hint">Ranges and single codes, comma separated</span>
+                            </div>
+                            <div class="field">
+                                <label for="appKeyword">Expected body keyword <span class="subtle">(optional)</span></label>
+                                <input class="input" id="appKeyword" name="expected_body_keyword" placeholder="ok">
+                                <span class="hint">Check fails when the body lacks this text</span>
+                            </div>
+                            <div class="field span-2">
+                                <label for="appHeaders">Custom request headers (JSON)</label>
+                                <textarea class="textarea" id="appHeaders" name="request_headers" placeholder='{"Authorization": "Bearer ..."}'></textarea>
+                            </div>
+                        </div>
+                    </details>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" data-close-modal>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="appSubmitBtn">Save application</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="healthHistoryModal" role="dialog" aria-modal="true" aria-labelledby="healthHistoryTitle">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <div>
+                <h3 id="healthHistoryTitle">Health history</h3>
+                <p id="healthHistorySubtitle">&nbsp;</p>
+            </div>
+            <div class="spacer"></div>
+            <select class="select" id="historyRange" style="width:auto" aria-label="History range">
+                <option value="1">Last hour</option>
+                <option value="6" selected>Last 6 hours</option>
+                <option value="24">Last 24 hours</option>
+                <option value="168">Last 7 days</option>
+            </select>
+            <button type="button" class="btn btn-icon btn-ghost modal-close" data-close-modal aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="grid grid-stats mb-16" id="historyStats"></div>
+            <div class="mb-16">
+                <div id="historySparkline"></div>
+            </div>
+            <div class="table-wrap">
+                <table class="data">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Status</th>
+                            <th class="numeric">HTTP</th>
+                            <th class="numeric">Response</th>
+                            <th>Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="incidentFormModal" role="dialog" aria-modal="true" aria-labelledby="incidentFormTitle">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <div>
+                <h3 id="incidentFormTitle">New incident</h3>
+                <p>Record a problem that is not detected automatically.</p>
+            </div>
+            <div class="spacer"></div>
+            <button type="button" class="btn btn-icon btn-ghost modal-close" data-close-modal aria-label="Close">&times;</button>
+        </div>
+        <form id="incidentForm" novalidate>
+            <div class="modal-body">
+                <input type="hidden" id="incidentIdField">
+                <div class="form-grid">
+                    <div class="field span-2">
+                        <label for="incidentApplication">Application</label>
+                        <select class="select" id="incidentApplication" name="application_id" required></select>
+                    </div>
+                    <div class="field span-2">
+                        <label for="incidentTitle">Title</label>
+                        <input class="input" id="incidentTitle" name="title" required maxlength="200" placeholder="Checkout latency above 4s">
+                    </div>
+                    <div class="field">
+                        <label for="incidentSeverity">Severity</label>
+                        <select class="select" id="incidentSeverity" name="severity"></select>
+                    </div>
+                    <div class="field">
+                        <label for="incidentStatus">Status</label>
+                        <select class="select" id="incidentStatus" name="status"></select>
+                    </div>
+                    <div class="field">
+                        <label for="incidentAssignee">Assignee</label>
+                        <input class="input" id="incidentAssignee" name="assignee" placeholder="on-call engineer">
+                    </div>
+                    <div class="field span-2">
+                        <label for="incidentDescription">Description</label>
+                        <textarea class="textarea" id="incidentDescription" name="description" placeholder="What is happening and who is affected?"></textarea>
+                    </div>
+                    <div class="field span-2">
+                        <label for="incidentRootCause">Root cause <span class="subtle">(optional)</span></label>
+                        <textarea class="textarea" id="incidentRootCause" name="root_cause" placeholder="Filled in on resolution, or when the cause is known"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" data-close-modal>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="incidentSubmitBtn">Create incident</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="incidentDetailModal" role="dialog" aria-modal="true" aria-labelledby="incidentDetailTitle">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <div>
+                <h3 id="incidentDetailTitle">Incident</h3>
+                <p id="incidentDetailSubtitle">&nbsp;</p>
+            </div>
+            <div class="spacer"></div>
+            <button type="button" class="btn btn-icon btn-ghost modal-close" data-close-modal aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body" id="incidentDetailBody"></div>
+        <div class="modal-footer" id="incidentDetailFooter"></div>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="deploymentFormModal" role="dialog" aria-modal="true" aria-labelledby="deploymentFormTitle">
+    <div class="modal modal-wide">
+        <div class="modal-header">
+            <div>
+                <h3 id="deploymentFormTitle">Record deployment</h3>
+                <p>Log a release so the delivery timeline stays complete.</p>
+            </div>
+            <div class="spacer"></div>
+            <button type="button" class="btn btn-icon btn-ghost modal-close" data-close-modal aria-label="Close">&times;</button>
+        </div>
+        <form id="deploymentForm" novalidate>
+            <div class="modal-body">
+                <input type="hidden" id="deploymentIdField">
+                <div class="form-grid">
+                    <div class="field span-2">
+                        <label for="deploymentApplication">Application</label>
+                        <select class="select" id="deploymentApplication" name="application_id" required></select>
+                    </div>
+                    <div class="field">
+                        <label for="deploymentVersion">Version</label>
+                        <input class="input" id="deploymentVersion" name="version" required maxlength="100" placeholder="v2.4.0">
+                    </div>
+                    <div class="field">
+                        <label for="deploymentEnvironment">Environment</label>
+                        <select class="select" id="deploymentEnvironment" name="environment"></select>
+                    </div>
+                    <div class="field">
+                        <label for="deploymentStatus">Status</label>
+                        <select class="select" id="deploymentStatus" name="status"></select>
+                    </div>
+                    <div class="field">
+                        <label for="deploymentDuration">Duration (seconds)</label>
+                        <input class="input" type="number" id="deploymentDuration" name="duration_seconds" min="0" placeholder="142">
+                    </div>
+                    <div class="field span-2">
+                        <label for="deploymentCommit">Commit hash <span class="subtle">(optional)</span></label>
+                        <input class="input mono" id="deploymentCommit" name="commit_hash" maxlength="64" placeholder="9f2c1ab">
+                    </div>
+                    <div class="field span-2">
+                        <label for="deploymentChangelog">Changelog <span class="subtle">(optional)</span></label>
+                        <textarea class="textarea" id="deploymentChangelog" name="changelog" placeholder="What changed in this release?"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" data-close-modal>Cancel</button>
+                <button type="submit" class="btn btn-primary" id="deploymentSubmitBtn">Save deployment</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="toast-stack" role="status" aria-live="polite"></div>
+
+<script src="{{ url_for('static', filename='js/core.js') }}"></script>
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/overview.js') }}"></script>
+<script src="{{ url_for('static', filename='js/applications.js') }}"></script>
+<script src="{{ url_for('static', filename='js/incidents.js') }}"></script>
+<script src="{{ url_for('static', filename='js/deployments.js') }}"></script>
+<script src="{{ url_for('static', filename='js/activity.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
 
 </body>
 </html>

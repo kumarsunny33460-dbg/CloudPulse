@@ -1,0 +1,72 @@
+name: CloudPulse Kubernetes Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "k8s/**"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/cloudpulse:latest
+  NAMESPACE: cloudpulse
+
+jobs:
+
+  validate:
+    name: Validate manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.31.0
+
+      - name: Validate kustomize build
+        run: |
+          kubectl kustomize k8s/overlays/production > /tmp/rendered.yaml
+          kubectl apply --dry-run=client -f /tmp/rendered.yaml || true
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    environment: production
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          kubeconfig: ${{ secrets.KUBECONFIG }}
+
+      - name: Update the image tag
+        run: |
+          cd k8s/overlays/production
+          kustomize edit set image cloudpulse=${IMAGE}
+
+      - name: Apply manifests
+        run: |
+          kubectl apply -k k8s/overlays/production
+          kubectl -n ${NAMESPACE} rollout status deployment/cloudpulse --timeout=300s
+
+      - name: Verify the deployment responds
+        run: |
+          for attempt in $(seq 1 30); do
+            if kubectl -n ${NAMESPACE} get pods -l app=cloudpulse \
+                 -o jsonpath='{.items[0].status.phase}' | grep -q Running; then
+              kubectl -n ${NAMESPACE} port-forward svc/cloudpulse 8080:80 &
+              sleep 5
+              curl -fsS http://127.0.0.1:8080/health && exit 0
+            fi
+            sleep 5
+          done
+          kubectl -n ${NAMESPACE} get pods -l app=cloudpulse
+          exit 1

@@ -1,0 +1,353 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Applications monitored",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "count(cloudpulse_application_info)", "legendFormat": "total" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "blue" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Up now",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(cloudpulse_application_up) or vector(0)", "legendFormat": "up" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "green" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Down now",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(cloudpulse_application_up == 0) or vector(0)", "legendFormat": "down" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "red" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Mean availability",
+      "description": "Average of cloudpulse_application_uptime_ratio, a 0-1 ratio maintained by the monitoring engine over the configured window.",
+      "gridPos": { "h": 4, "w": 4, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "avg(cloudpulse_application_uptime_ratio)", "legendFormat": "avg" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "color": { "mode": "fixedColor", "fixedColor": "green" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Overall request rate",
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(rate(cloudpulse_http_requests_total[5m]))", "legendFormat": "reqps" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "color": { "mode": "fixedColor", "fixedColor": "purple" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Availability per application",
+      "description": "cloudpulse_application_up is 1 when the most recent health check succeeded and 0 otherwise.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "cloudpulse_application_up", "legendFormat": "{{application}} ({{environment}})" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "custom": { "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Rolling availability ratio per application",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "cloudpulse_application_uptime_ratio",
+          "legendFormat": "{{application}} ({{environment}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "lineWidth": 2 }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Health check latency p50 / p90 / p99",
+      "description": "Quantiles over the histogram of the health check responses CloudPulse itself serves on /metrics, computed from cloudpulse_health_check_response_time_ms rather than from a per-application histogram, which the exporter does not publish.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "cloudpulse_health_check_response_time_ms{stat=\"avg\"}",
+          "legendFormat": "avg"
+        },
+        {
+          "expr": "cloudpulse_health_check_response_time_ms{stat=\"max\"}",
+          "legendFormat": "max (upper bound on p99)"
+        },
+        {
+          "expr": "avg(cloudpulse_application_response_time_ms)",
+          "legendFormat": "avg per-application last response"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "API latency p50 / p90 / p99 by route",
+      "description": "True quantiles from cloudpulse_http_request_duration_seconds_bucket, the latency of the API this dashboard is served from.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, route) (rate(cloudpulse_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p50 {{route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, route) (rate(cloudpulse_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p90 {{route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, route) (rate(cloudpulse_http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p99 {{route}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "lineWidth": 2 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by route",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (route) (rate(cloudpulse_http_requests_total[5m]))",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "HTTP status code breakdown",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(cloudpulse_http_requests_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "API error rate (4xx and 5xx)",
+      "description": "Requests per second answered with a 4xx or 5xx status, split so a client error is never mistaken for a server fault.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(rate(cloudpulse_http_requests_total{status=~\"4..\"}[5m]))",
+          "legendFormat": "4xx"
+        },
+        {
+          "expr": "sum(rate(cloudpulse_http_requests_total{status=~\"5..\"}[5m]))",
+          "legendFormat": "5xx"
+        },
+        {
+          "expr": "sum(rate(cloudpulse_http_requests_total{status=~\"[45]..\"}[5m])) / clamp_min(sum(rate(cloudpulse_http_requests_total[5m])), 0.001)",
+          "legendFormat": "error ratio"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2 } },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "error ratio" },
+            "properties": [{ "id": "unit", "value": "percentunit" }]
+          }
+        ]
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Health check results by status",
+      "description": "cloudpulse_health_checks_recorded is the current row count per status, not a rate. A falling DOWN line is good.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 28 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "cloudpulse_health_checks_recorded", "legendFormat": "{{status}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "title": "Applications and their last status",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 36 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "cloudpulse_application_info",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{application}}"
+        },
+        {
+          "expr": "cloudpulse_application_up",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__up__"
+        },
+        {
+          "expr": "cloudpulse_application_response_time_ms",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__response__"
+        },
+        {
+          "expr": "cloudpulse_application_uptime_ratio",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__availability__"
+        },
+        {
+          "expr": "cloudpulse_application_consecutive_failures",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "__failures__"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": { "byField": "application", "mode": "outer" }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "id 1": true, "id 2": true, "id 3": true, "id 4": true, "id 5": true, "environment 1": true, "environment 2": true, "environment 3": true, "environment 4": true, "environment 5": true },
+            "renameByName": {
+              "application": "application",
+              "environment 1": "environment",
+              "url": "url",
+              "Value #A": "up",
+              "Value #B": "last response (ms)",
+              "Value #C": "availability",
+              "Value #D": "consecutive failures"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": { "fields": {}, "sort": [{ "field": "up", "desc": false }] }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "last response (ms)" },
+            "properties": [{ "id": "unit", "value": "ms" }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "availability" },
+            "properties": [{ "id": "unit", "value": "percentunit" }]
+          }
+        ]
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["cloudpulse", "devops", "endpoints"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "CloudPulse Endpoints",
+  "uid": "cloudpulse-endpoints",
+  "version": 1,
+  "weekStart": ""
+}

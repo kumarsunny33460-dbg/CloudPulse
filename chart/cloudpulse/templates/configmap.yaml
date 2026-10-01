@@ -1,0 +1,35 @@
+{{/*
+Non-sensitive configuration only. Anything credential-shaped lives in the
+Secret, never here: a ConfigMap is readable by anything that can read pods,
+is not encrypted at rest by default, and is dumped in plaintext by `helm get
+manifest`.
+
+The split is driven by the "cloudpulse.secretKeys" allow-list rather than a
+denylist, so a setting added in a later version lands here by default instead of
+being written to a Secret or silently dropped.
+*/}}
+{{- $sensitive := include "cloudpulse.secretKeys" . | fromJsonArray }}
+{{- $structural := include "cloudpulse.structuralKeys" . | fromJsonArray }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config }}
+    {{- if and (not (has $key $sensitive)) (not (has $key $structural)) }}
+  {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.config.extra }}
+    {{- range $key, $value := . }}
+  {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}
+  {{- with .Values.config.extraConfigMap }}
+    {{- range $key, $value := . }}
+  {{ $key }}: {{ $value | quote }}
+    {{- end }}
+  {{- end }}

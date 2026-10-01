@@ -1,0 +1,180 @@
+﻿# ==================================================================
+# Alertmanager routing for CloudPulse
+#
+# CREDENTIALS: every value below that looks like a credential is a
+# placeholder. Replace them through a mounted secret or through
+# `alertmanager --config.file` with a generated config. Never commit a
+# filled-in copy of this file.
+#
+# The <REPLACE_ME> style values under `global` are the ones the
+# CloudPulse deployment templates are expected to substitute. Alertmanager
+# does NOT read environment variables by itself: `smtp_smarthost`,
+# `smtp_from` and friends are literal strings. Substitution happens
+# either
+#   (a) at deploy time - the container entrypoint runs envsubst over this
+#       file before starting Alertmanager, so the `${VAR}` tokens below
+#       become the real values from the environment, or
+#   (b) by a SealedSecret / External Secrets Operator that writes a
+#       rendered copy of this file.
+# If neither is in place, Alertmanager starts normally and every message
+# fails to deliver, which the `default` receiver's dead-man's-switch
+# message is designed to make obvious.
+# ==================================================================
+
+global:
+  # --- SMTP (used by the email_options path and the watchdogs below) ---
+  # <REPLACE_ME: relay host:port, e.g. smtp.example.com:587>
+  # Templated from ${SMTP_SMARTHOST} at deploy time.
+  smtp_smarthost: ${SMTP_SMARTHOST:-smtp.example.com:587}
+  # <REPLACE_ME: envelope sender>
+  smtp_from: ${SMTP_FROM:-cloudpulse@localhost}
+  # <REPLACE_ME: SMTP username>
+  smtp_auth_username: ${SMTP_USERNAME}
+  # <REPLACE_ME: SMTP password>
+  smtp_auth_password: ${SMTP_PASSWORD}
+  # Refuse to send credentials over an unencrypted connection.
+  smtp_require_tls: true
+
+  # Default when an alert carries no severity label.
+  resolve_timeout: 5m
+
+# Notification templates. The directory is baked into the container image at
+# /etc/alertmanager/templates and mounted read-only at runtime.
+templates:
+  - /etc/alertmanager/templates/*.tmpl
+
+# ==================================================================
+# Routing tree
+#
+# The first matching child route wins, so the severity=critical route is
+# declared before the catch-all. Anything that does not match a child falls
+# through to the root receiver.
+# ==================================================================
+route:
+  # Alerts are batched by alert name and application so a flapping endpoint
+  # produces one message per app instead of one per scrape.
+  group_by: [alertname, application]
+  # Wait 30s after the first alert in a group before notifying, to let a
+  # short blip resolve itself.
+  group_wait: 30s
+  # Minimum gap between two notifications for the same group.
+  group_interval: 5m
+  # Re-notify about an unresolved alert every 4h.
+  repeat_interval: 4h
+
+  receiver: default
+
+  routes:
+    # Page a human. Placed first so it is evaluated before the fallback.
+    - receiver: critical
+      matchers:
+        - severity = "critical"
+      group_by: [alertname, application, environment]
+      # Critical alerts page immediately rather than waiting out group_wait.
+      group_wait: 10s
+      group_interval: 2m
+      repeat_interval: 1h
+      continue: false
+
+    # Everything else that is not a warning goes to Slack only.
+    - receiver: default
+      matchers:
+        - severity =~ "warning|info"
+      group_wait: 60s
+      repeat_interval: 12h
+
+    # Silence the noisy synthetic checks during a planned maintenance window.
+    # Uncomment and set the times before each maintenance run.
+    # - receiver: "null"
+    #   matchers:
+    #     - alertname = "CloudPulseApplicationDown"
+    #   matchers:
+    #     - environment =~ "maintenance"
+
+# ==================================================================
+# Inhibition: a warning about an application is noise while the critical
+# alert for the same application is already firing and already paging.
+# Equal sources and targets are blocked; only a warning is inhibited, never
+# a critical.
+# ==================================================================
+inhibit_rules:
+  # Same alert, same application: a critical CloudPulseApplicationDown mutes a
+  # warning on the same app.
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: [alertname, application]
+  # Broader: any critical on an application suppresses every warning for that
+  # application, even one with a different alert name.
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: [application]
+  # A stalled monitoring loop makes the availability metrics stale, so the
+  # per-application down alerts it causes are meaningless until the loop
+  # recovers. equal is empty on purpose: CloudPulseMonitoringStalled carries no
+  # `application` label, so matching on it would never fire.
+  - source_matchers:
+      - alertname = "CloudPulseMonitoringStalled"
+    target_matchers:
+      - alertname =~ "CloudPulseApplicationDown|CloudPulseConsecutiveFailures"
+    equal: []
+
+# ==================================================================
+# Receivers
+# ==================================================================
+receivers:
+  # --- default: Slack only, no page -----------------------------
+  - name: default
+    webhook_configs:
+      # A real Slack incoming-webhook URL is a live credential: anyone holding
+      # it can post into the channel. It is deliberately not spelled out here
+      # even as a shaped example, because a string that matches the token
+      # format is rejected by GitHub push protection and can be copied into the
+      # file by accident. Supply it at deploy time instead:
+      #   helm install ... --set alerting.slackWebhook=<url>
+      # or point it at a secret manager.
+      - url: "<slack-incoming-webhook-url>"
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+    # Dead man's switch. If this stops arriving, the pipeline is broken even
+    # when nothing is on fire. Uncomment and point it at an integration.
+    # webhook_configs:
+    #   - url: <REPLACE_ME: healthchecks.io ping URL>
+    #     send_resolved: true
+
+  # --- critical: Slack and a phone ------------------------------
+  - name: critical
+    webhook_configs:
+      - url: "<REPLACE_ME: Slack webhook for the #incidents channel>"
+        send_resolved: true
+    pagerduty_configs:
+      # <REPLACE_ME: PagerDuty integration key, 32 hex characters>
+      - routing_key: "<REPLACE_ME: 00000000000000000000000000000000>"
+        description: '{{ .GroupLabels.Severity | toUpper }}: {{ .CommonLabels.alertname }} on {{ .CommonLabels.application | default "cloudpulse" }}'
+        # Page again while the alert is still firing even if nothing changed.
+        client_url: '{{ .StatusReceiverURL }}'
+        details:
+          alertname: '{{ .CommonLabels.alertname }}'
+          application: '{{ .CommonLabels.application }}'
+          environment: '{{ .CommonLabels.environment }}'
+          summary: '{{ .CommonAnnotations.summary }}'
+          description: '{{ .CommonAnnotations.description }}'
+          runbook_url: '{{ (index .CommonLabels "runbook_url") | default "n/a" }}'
+        # Re-page every 30m while the condition holds. This is independent of
+        # the route's repeat_interval, which only controls re-notification.
+        resolve_timeout: 5m
+
+  # --- null: acknowledged, silenced, and intentionally dropped ----
+  - name: "null"
+
+# ==================================================================
+# Templates for the receivers. Kept inline for reference; mount them from
+# /etc/alertmanager/templates to actually use them.
+#
+# {{ define "slack.default.text" }}...{{ end }}
+# {{ define "slack.critical.color" }}...{{ end }}
+# ==================================================================

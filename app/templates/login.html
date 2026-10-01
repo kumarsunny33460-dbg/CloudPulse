@@ -162,6 +162,13 @@
             margin-top: 22px;
         }
 
+        .hint {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 7px;
+            line-height: 1.5;
+        }
+
         @media (max-width: 480px) {
             .card {
                 padding: 24px;
@@ -211,6 +218,8 @@
 
             <form method="POST" action="/login">
 
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
                 <div class="form-group">
 
                     <label for="email">
@@ -251,6 +260,10 @@
                 >
                     Sign In
                 </button>
+
+                <p class="hint">
+                    <a href="/forgot-password">Forgot your password?</a>
+                </p>
 
             </form>
 

@@ -1,0 +1,346 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Open incidents (all severities)",
+      "description": "cloudpulse_incidents_open counts every incident whose status is not Resolved.",
+      "gridPos": { "h": 4, "w": 5, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(cloudpulse_incidents_open) or vector(0)", "legendFormat": "open" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "red" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Open critical",
+      "gridPos": { "h": 4, "w": 5, "x": 5, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"Critical\",status!=\"Resolved\"}) or vector(0)",
+          "legendFormat": "critical"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "dark-red" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Open high",
+      "gridPos": { "h": 4, "w": 5, "x": 10, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"High\",status!=\"Resolved\"}) or vector(0)",
+          "legendFormat": "high"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "orange" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Open medium",
+      "gridPos": { "h": 4, "w": 4, "x": 15, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"Medium\",status!=\"Resolved\"}) or vector(0)",
+          "legendFormat": "medium"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "yellow" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Open low",
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"Low\",status!=\"Resolved\"}) or vector(0)",
+          "legendFormat": "low"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "blue" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Total incidents recorded",
+      "description": "Every incident ever stored, by status.",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(cloudpulse_incidents)", "legendFormat": "total" }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Incidents created in the last hour",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(increase(cloudpulse_incidents{status=\"Open\"}[1h])) or vector(0)",
+          "legendFormat": "new"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "purple" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Applications currently down",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum(cloudpulse_application_up == 0) or vector(0)", "legendFormat": "down" }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "red" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Apps at or above the failure threshold",
+      "description": "Applications with at least three consecutive failed health checks, which is what opens an incident.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_application_consecutive_failures >= 3) or vector(0)",
+          "legendFormat": "flapping"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "fixedColor", "fixedColor": "dark-orange" } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Incident creation rate (per hour)",
+      "description": "increase() over the open-incident gauge. It is a rate of a gauge, so it shows how fast the open count is growing, not a true cumulative counter.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(increase(cloudpulse_incidents{status=\"Open\"}[1h]))",
+          "legendFormat": "all severities"
+        },
+        {
+          "expr": "sum(increase(cloudpulse_incidents{status=\"Open\",severity=\"Critical\"}[1h]))",
+          "legendFormat": "critical"
+        },
+        {
+          "expr": "sum(increase(cloudpulse_incidents{status=\"Open\",severity=\"High\"}[1h]))",
+          "legendFormat": "high"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "barchart",
+      "title": "Open incidents by severity and status",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (severity, status) (cloudpulse_incidents)",
+          "legendFormat": "{{severity}} / {{status}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Open incidents over time by severity",
+      "description": "Track the burn-down: each series should fall to zero after AUTO_RESOLVE_INCIDENTS does its work.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum by (severity) (cloudpulse_incidents{status!=\"Resolved\"})",
+          "legendFormat": "{{severity}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2, "stacking": { "mode": "normal" } } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Incident resolution proxy (MTTR trend)",
+      "description": "Prometheus cannot reconstruct a true mean time to resolve: CloudPulse does not export an incident resolution timestamp. What is exported is the cumulative resolved count, so this is the resolution throughput, derived from it. Read it as a trend, not as a literal MTTR figure.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_incidents{status=\"Resolved\"})",
+          "legendFormat": "resolved (cumulative)",
+          "type": "cumulative"
+        },
+        {
+          "expr": "sum(increase(cloudpulse_incidents{status=\"Resolved\"}[1h]))",
+          "legendFormat": "resolved per hour"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "bargauge",
+      "title": "SLA pressure by severity",
+      "description": "Open incidents weighted by the SLA target in minutes (critical 30, high 120, medium 480, low 1440, from the SLA_* settings in .env.example). A tall bar means a lot of SLA budget is already consumed by incidents that have not been resolved. This is a weighting of the incident counts, not an export of an SLA clock.",
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"Critical\",status!=\"Resolved\"}) * 30 or vector(0)",
+          "legendFormat": "critical x30m"
+        },
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"High\",status!=\"Resolved\"}) * 120 or vector(0)",
+          "legendFormat": "high x120m"
+        },
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"Medium\",status!=\"Resolved\"}) * 480 or vector(0)",
+          "legendFormat": "medium x480m"
+        },
+        {
+          "expr": "sum(cloudpulse_incidents{severity=\"Low\",status!=\"Resolved\"}) * 1440 or vector(0)",
+          "legendFormat": "low x1440m"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "m" },
+        "overrides": []
+      }
+    },
+    {
+      "type": "table",
+      "title": "Top affected applications",
+      "description": "Consecutive failed health checks per application, the trigger value CloudPulse uses to open an incident. Non-zero rows are the applications currently on an SLA clock.",
+      "gridPos": { "h": 9, "w": 16, "x": 8, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "expr": "topk(10, cloudpulse_application_consecutive_failures)",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "{{application}}"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "id": true, "Value": true },
+            "indexByName": { "Time": 0, "application": 1, "environment": 2, "id": 3, "Value": 4 },
+            "renameByName": {
+              "Time": "",
+              "Value": "consecutive failures",
+              "application": "application",
+              "environment": "environment",
+              "id": "id"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": { "fields": {}, "sort": [{ "field": "consecutive failures", "desc": true }] }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Health checks recorded by status",
+      "description": "cloudpulse_health_checks_recorded is the current size of the health check table per status, after HEALTH_CHECK_RETENTION_DAYS pruning.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "cloudpulse_health_checks_recorded", "legendFormat": "{{status}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "lineWidth": 2 } },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Health check latency (aggregate)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "cloudpulse_health_check_response_time_ms", "legendFormat": "{{stat}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "custom": { "lineWidth": 2 } },
+        "overrides": []
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["cloudpulse", "devops", "incidents"],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      }
+    ]
+  },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "CloudPulse Incidents",
+  "uid": "cloudpulse-incidents",
+  "version": 1,
+  "weekStart": ""
+}

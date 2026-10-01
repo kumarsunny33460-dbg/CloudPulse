@@ -1,0 +1,71 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: cloudpulse
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: cloudpulse
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: ghcr.io/your-github-username/cloudpulse
+    newTag: latest
+
+replicas:
+  - name: cloudpulse
+    count: 3
+
+# The base declares cloudpulse-config as static YAML, so configMapGenerator
+# cannot merge into it: a generator only merges with maps it generated itself.
+# The environment specific values are applied as a strategic merge patch on the
+# existing ConfigMap instead.
+patches:
+  - target:
+      kind: ConfigMap
+      name: cloudpulse-config
+    patch: |
+      - op: add
+        path: /data/MONITOR_INTERVAL_SECONDS
+        value: "60"
+      - op: add
+        path: /data/ENABLE_SCHEDULER
+        value: "true"
+
+# The base declares cloudpulse-secrets as static YAML, so a secretGenerator
+# cannot merge into it -- a generator only reaches maps it generated itself,
+# and `behavior: create` instead collides with the base copy of the same name.
+# The base object is dropped here and the overlay's own Secret replaces it.
+#
+# These are placeholders. In production create the Secret out of band from a
+# secrets manager (External Secrets Operator, Secrets Store CSI, or SOPS) and
+# delete this block entirely; see the comment above the Secret in
+# k8s/base/cloudpulse.yaml.
+patches:
+  - target:
+      kind: ConfigMap
+      name: cloudpulse-config
+    patch: |
+      - op: add
+        path: /data/MONITOR_INTERVAL_SECONDS
+        value: "60"
+      - op: add
+        path: /data/ENABLE_SCHEDULER
+        value: "true"
+  - patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: cloudpulse-secrets
+        namespace: cloudpulse
+
+secretGenerator:
+  - name: cloudpulse-secrets
+    literals:
+      - SECRET_KEY=replace-me-with-a-long-random-value
+      - DATABASE_URL=postgresql://cloudpulse:cloudpulse@cloudpulse-postgres:5432/cloudpulse

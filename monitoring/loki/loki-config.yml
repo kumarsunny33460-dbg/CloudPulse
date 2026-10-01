@@ -1,0 +1,114 @@
+# ==================================================================
+# Loki single-binary configuration for the CloudPulse demo stack.
+#
+# Storage is the local filesystem. That is deliberate for this project: the
+# point is to show the configuration, not to run a multi-tenant Loki. To
+# move to object storage, change boltdb_shipper's shared_store to s3 and
+# configure the s3 block below it; nothing else changes.
+#
+# Retention: 168h (7 days) is enforced by the compactor, which deletes log
+# chunks older than that from the store. limits_config.retention_period
+# alone only makes the data ineligible, it does not free the disk.
+# ==================================================================
+
+# No tenant headers. The single-binary demo is unauthenticated, which is why
+# it must never be exposed outside the monitoring network. Set to true and
+# add an auth_enabled-aware reverse proxy before doing that.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+  # Bounded so a runaway log volume cannot exhaust the container's memory.
+  grpc_server_max_recv_msg_size: 8388608
+  grpc_server_max_send_msg_size: 8388608
+
+common:
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    instance_addr: 127.0.0.1
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    # From 2024-01-01 onwards Loki uses the tsdb schema, which is required
+    # for structured metadata and for efficient index queries. The day is in
+    # the past on purpose: it must be a fixed, never-changing date, and it
+    # must be at or before the first chunk you ever wrote. Changing it later
+    # invalidates the existing index.
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+    # Ship every 1h instead of the 15m default: this deployment is low
+    # volume and the periodic upload is pure overhead.
+    shared_store: filesystem
+  filesystem:
+    directory: /loki/chunks
+
+limits_config:
+  # Data older than this is rejected by the compactor's delete request store.
+  retention_period: 168h
+  # Reject pushes carrying a timestamp older than this, so a container with
+  # a wrong clock cannot flood the store with year-old chunks.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  # Bounds a single request so one noisy application cannot block the rest.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  # CloudPulse emits a small number of labels per stream. Capping the count
+  # and length is what stops a high-cardinality label from exhausting memory.
+  max_label_names_per_series: 15
+  max_label_value_length: 1024
+  max_label_name_length: 1024
+  max_query_series: 5000
+  max_query_lookback: 168h
+  # Required by tsdb/v13. Leave true; the Promtail config does not set
+  # __structured_metadata, so nothing is sent as structured metadata.
+  allow_structured_metadata: true
+  max_cache_freshness_per_query: 10m
+  volume_enabled: true
+
+compactor:
+  working_directory: /loki/compactor
+  # Without this the chunks stay on disk after the retention window.
+  retention_enabled: true
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  retention_delete_delay: 2h
+  retention_delete_worker_count: 50
+
+ruler:
+  # The ruler runs in the same process. alerting is off because routing goes
+  # through the Prometheus in monitoring/prometheus.yml, which evaluates the
+  # same rules from monitoring/alert-rules.yml. The directory is still
+  # declared so a rule file dropped in at /loki/rules is picked up for
+  # recording rules.
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+  rule_path: /loki/rules-temp
+  ring:
+    kvstore:
+      store: inmemory
+  enable_api: true
+
+# Log line volume over the retention window, shown on /metrics.
+analytics:
+  reporting_enabled: false

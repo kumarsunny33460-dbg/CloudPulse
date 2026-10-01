@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+    app: cloudpulse
+    {{- with .Values.service.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: {{ .Values.service.appProtocol | default "http" }}
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      {{- if .Values.service.appProtocol }}
+      appProtocol: {{ .Values.service.appProtocol }}
+      {{- end }}
+  selector:
+    {{- include "cloudpulse.selectorLabels" . | nindent 4 }}
+{{- if .Values.headlessService.enabled }}
+---
+{{/*
+Headless Service. clusterIP: None gives each pod a stable per-pod DNS record
+under <pod>.<service>.<namespace>.svc.cluster.local. The scheduler and any
+future leader election use this to address individual replicas without going
+through the load-balanced ClusterIP.
+*/}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}-headless
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+    app: cloudpulse
+  {{- with .Values.headlessService.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+  selector:
+    {{- include "cloudpulse.selectorLabels" . | nindent 4 }}
+{{- end }}

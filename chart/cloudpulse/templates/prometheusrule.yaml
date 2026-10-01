@@ -1,0 +1,109 @@
+{{- if .Values.monitoring.prometheusRule.enabled -}}
+{{/*
+These rules are the PrometheusRule equivalent of monitoring/alert-rules.yml.
+Both files must be kept in step: the standalone file is loaded by a plain
+Prometheus through rule_files, this CRD is loaded by the Prometheus Operator.
+
+Every "{{ ... }}" inside a rule annotation would otherwise be evaluated as a
+Helm template action, so the ones that must reach Prometheus as Go template
+syntax are written as backtick-quoted raw strings.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}
+  namespace: {{ default .Release.Namespace .Values.monitoring.prometheusRule.namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+    app: cloudpulse
+    {{- with .Values.monitoring.prometheusRule.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: cloudpulse-availability
+      rules:
+        - alert: CloudPulseApplicationDown
+          expr: cloudpulse_application_up == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Application {{ `{{ $labels.application }}` }} is down"
+            description: >-
+              The most recent health check for {{ `{{ $labels.application }}` }}
+              ({{ `{{ $labels.environment }}` }}) failed. Upstream condition:
+              {{ `{{ $value }}` }}, where 0 means the last check did not succeed.
+
+        - alert: CloudPulseApplicationDegraded
+          expr: cloudpulse_application_response_time_ms > 1000
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Application {{ `{{ $labels.application }}` }} is slow"
+            description: >-
+              Average response time is {{ `{{ $value }}` }}ms, above the 1000ms target.
+
+        - alert: CloudPulseConsecutiveFailures
+          expr: cloudpulse_application_consecutive_failures >= 3
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Repeated failures for {{ `{{ $labels.application }}` }}"
+            description: "{{ `{{ $value }}` }} consecutive failed health checks."
+
+    - name: cloudpulse-incidents
+      rules:
+        - alert: CloudPulseOpenIncident
+          expr: cloudpulse_incidents_open > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CloudPulse has open incidents"
+            description: "{{ `{{ $value }}` }} incident(s) are currently unresolved."
+
+        # cloudpulse_incidents is a gauge recomputed from the database at every
+        # scrape: a snapshot of currently-open incidents, not a monotonic counter
+        # of how many were ever created. increase() would extrapolate a reset on
+        # every scrape and only ever grow, so delta() measures the real change.
+        - alert: CloudPulseIncidentSpike
+          expr: |
+            sum(
+              delta(
+                cloudpulse_incidents{status=~"Open|Investigating"}[15m]
+              )
+            ) > 5
+          labels:
+            severity: critical
+          annotations:
+            summary: "Incident volume spike"
+            description: >-
+              The number of unresolved incidents grew by {{ `{{ $value }}` }} in
+              the last 15 minutes, which indicates a burst of new incidents
+              rather than a steady backlog.
+
+    - name: cloudpulse-platform
+      rules:
+        - alert: CloudPulseMonitoringStalled
+          expr: time() - cloudpulse_monitoring_last_run_timestamp_seconds > 300
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CloudPulse monitoring loop has stalled"
+            description: >-
+              No monitoring cycle completed in the last five minutes. The
+              background scheduler may have crashed.
+
+        - alert: CloudPulsePrometheusTargetDown
+          expr: up{job="cloudpulse"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CloudPulse is not scrapeable"
+            description: "Prometheus has been unable to scrape /metrics."
+{{- end }}

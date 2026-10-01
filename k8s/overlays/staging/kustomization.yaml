@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+namespace: cloudpulse
+
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/part-of: cloudpulse
+      app.kubernetes.io/managed-by: kustomize
+
+images:
+  - name: ghcr.io/your-github-username/cloudpulse
+    newTag: latest
+
+# Replica count is set once, by the `replicas` transformer. A JSON patch that
+# rewrites /spec/replicas alongside this would be applied in an undefined order.
+replicas:
+  - name: cloudpulse
+    count: 1
+
+patches:
+  # The base declares cloudpulse-config as static YAML, so configMapGenerator
+  # cannot merge into it: a generator only merges with maps it generated itself.
+  # The environment specific values are applied as a strategic merge patch on the
+  # existing ConfigMap instead.
+  - target:
+      kind: ConfigMap
+      name: cloudpulse-config
+    patch: |
+      - op: add
+        path: /data/MONITOR_INTERVAL_SECONDS
+        value: "30"
+      - op: add
+        path: /data/HEALTH_CHECK_RETENTION_DAYS
+        value: "7"
+      - op: add
+        path: /data/SESSION_COOKIE_SECURE
+        value: "false"
+
+  - target:
+      kind: Deployment
+      name: cloudpulse
+    patch: |
+      - op: remove
+        path: /spec/template/spec/containers/0/livenessProbe

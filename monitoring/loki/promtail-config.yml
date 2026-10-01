@@ -1,0 +1,173 @@
+# ==================================================================
+# Promtail configuration for CloudPulse
+#
+# ACCURACY NOTE, READ THIS FIRST
+# The CloudPulse application does not write a log file. app/services/
+# logging_config.py installs a single logging.StreamHandler on sys.stdout
+# (`handler = logging.StreamHandler(stream=sys.stdout)`) and removes every
+# other root handler, so the process has no file sink at all. There is no
+# /var/log/cloudpulse directory in the image and none is created at start.
+#
+# The job below tails /var/log/cloudpulse/*.log because that is the stable
+# location the pipeline is specified against, and it works as soon as that
+# directory is actually populated. Two accurate ways to populate it:
+#
+#   1. Bind-mount the container runtime's log file:
+#        volumes:
+#          - /var/lib/docker/containers:/var/log/cloudpulse:ro
+#      Docker writes <container-id>/<container-id>-json.log, which does NOT
+#      match the *.log glob of the text job. Mount that single file as
+#        - ./logs/cloudpulse.log:/var/log/cloudpulse/cloudpulse.log:ro
+#      from `docker logs -f` or from the stdout tee used in front of gunicorn.
+#
+#   2. Leave the file path unset and use the CR journal job at the bottom of
+#      this file, which is what systemd and Kubernetes deployments actually
+#      need. On Kubernetes, use the Prometheus Operator DaemonSet and let it
+#      discover container logs; Promtail is not deployed there.
+#
+# Do not assume the directory exists because this file mentions it.
+# ==================================================================
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  # Where Promtail records how far it has read in each file. Mount this on a
+  # named volume: if it is lost, every file is re-read from the start and
+  # duplicated into Loki.
+  filename: /promtail/positions.yaml
+
+clients:
+  # Single upstream, no service discovery: the demo stack runs one Loki.
+  - url: http://loki:3100/loki/api/v1/push
+    # Queue up this many batches per client before pushing back on the
+    # read position. The defaults (1) are low enough to drop logs during a
+    # Loki restart.
+    batchwait: 1s
+    batchsize: 1048576
+    # Back off up to this long when Loki is unreachable.
+    backoff_config:
+      min_period: 500ms
+      max_period: 5m
+      max_retries: 10
+
+scrape_configs:
+  # ==================================================================
+  # CloudPulse application logs on disk
+  # ==================================================================
+  - job_name: cloudpulse
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: cloudpulse
+          app: cloudpulse
+          __path__: /var/log/cloudpulse/*.log
+
+    # Read the whole file from the top on first sight. A rotated log that has
+    # been sitting on disk for a while is still worth having in Loki.
+    tail_from_end: false
+
+    # Choose the parsing pipeline by file suffix so the same job handles both
+    # output formats. __path_format is a synthetic label set here and
+    # referenced by the `match` selectors in the pipeline stages below.
+    relabel_configs:
+      - source_labels: [__path__]
+        regex: '(.*)\.log\.json$'
+        target_label: __path_format
+        replacement: json
+      - source_labels: [__path__]
+        regex: '.*\.log$'
+        target_label: __path_format
+        replacement: text
+
+    pipeline_stages:
+      # --- LOG_FORMAT=text (the default) ---------------------------
+      # Format string is TEXT_FORMAT in app/services/logging_config.py:
+      #   "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+      # which renders as:
+      #   2026-09-30 12:00:00,123 | INFO    | cloudpulse.health | Health check result
+      #
+      # %(levelname)-8s left-pads the level to eight characters, so the
+      # separator after it is a run of spaces, not a single space. The
+      # remaining ` | key=value` pairs that TextFormatter appends stay in
+      # `msg` on purpose: they are unbounded, so indexing them as labels
+      # would blow up the stream count.
+      - match:
+          selectors:
+            - __path_format = "text"
+        pipeline_stages:
+          - regex:
+              expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) \|\s+(?P<level>[A-Z]+)\s+\| (?P<logger>[\w.\-]+) \| (?P<msg>.*)$'
+          - timestamp:
+              # Go reference layout. A comma before 000 is the documented
+              # alternative to the dot for Python's asctime.
+              source: timestamp
+              format: '2006-01-02 15:04:05,000'
+              # fudge stamps the ingest time instead of dropping the line if
+              # the parse fails, e.g. on a line written by a stack trace.
+              action_on_failure: fudge
+          - labels:
+              level:
+              logger:
+          - output:
+              # Store only the message part; the prefix has become labels.
+              source: msg
+
+      # --- LOG_FORMAT=json ------------------------------------------
+      # Set LOG_FORMAT=json in the app's environment and rename the file to
+      # *.log.json, or change the regex above. JSONFormatter emits
+      # timestamp/level/logger/message plus optional request_id, the promoted
+      # fields (client_ip, method, path, status, duration_ms), a `context`
+      # object and exception/stack on failure.
+      - match:
+          selectors:
+            - __path_format = "json"
+        pipeline_stages:
+          - json:
+              expressions:
+                level: level
+                logger: logger
+                msg: message
+              # Drop a malformed line rather than shipping it with empty
+              # fields, which would pollute the stream with a null logger.
+              drop_malformed: true
+          - timestamp:
+              # datetime.fromtimestamp(..., tz=UTC).isoformat()
+              source: timestamp
+              format: RFC3339Nano
+              action_on_failure: fudge
+          - labels:
+              level:
+              logger:
+          # No `output` stage on purpose: the full JSON object is kept as the
+          # log line so the promoted fields and the context object stay
+          # queryable with | json.
+
+  # ==================================================================
+  # systemd journal
+  # Correct source for a VM or bare-metal deployment, where the app runs
+  # under systemd rather than in a container. The journal has no filename,
+  # so the same text parser as the file job is used. If you set
+  # LOG_FORMAT=json here, replace this block with the json stage used in the
+  # cloudpulse job above; a json stage on text lines drops every line when
+  # drop_malformed is true.
+  # ==================================================================
+  - job_name: systemd
+    systemd_sd_configs:
+      - names:
+          - cloudpulse.service
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}) \|\s+(?P<level>[A-Z]+)\s+\| (?P<logger>[\w.\-]+) \| (?P<msg>.*)$'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05,000'
+          action_on_failure: fudge
+      - labels:
+          level:
+          logger:
+      - output:
+          source: msg

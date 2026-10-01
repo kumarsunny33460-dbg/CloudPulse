@@ -1,23 +1,86 @@
-FROM python:3.11-slim
+# syntax=docker/dockerfile:1
 
-# Prevent Python from creating .pyc files
-# and ensure logs appear immediately.
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
+# ==================================================================
+# Stage 1 - build the dependency layer
+# ==================================================================
+FROM python:3.12-slim AS builder
 
-# Application directory
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# ==================================================================
+# Stage 2 - runtime
+# ==================================================================
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    APP_ENV=production \
+    PORT=5000 \
+    INSTANCE_DIR=/home/cloudpulse/instance \
+    AUTO_CREATE_SCHEMA=true \
+    AUTO_SCHEMA_SYNC=true
+
+# ProductionConfig deliberately defaults both schema settings to false: with a
+# real DATABASE_URL the schema is owned by migrations, and creating it from
+# application code would let a replica race to define it. The SQLite fallback
+# has no migration path, so without these the container boots into a usable
+# /health and then 500s on every endpoint that touches a table, with no clear
+# clue why. Point DATABASE_URL at PostgreSQL, run `flask db upgrade`, and set
+# these back to false.
+
+# The healthcheck uses Python's standard library rather than curl. Installing
+# curl needed an apt-get round trip, which adds a network dependency to every
+# build, pulls an extra package into the image, and fails outright on hosts
+# that cannot reach the Debian mirrors. urllib is always present.
+#
+# Run as an unprivileged user
+RUN groupadd --system cloudpulse \
+    && useradd --system --gid cloudpulse --create-home --home-dir /home/cloudpulse cloudpulse
+
+COPY --from=builder /opt/venv /opt/venv
+
 WORKDIR /app
 
-# Install dependencies first for better Docker layer caching
-COPY requirements.txt .
+COPY --chown=cloudpulse:cloudpulse . .
 
-RUN pip install --no-cache-dir -r requirements.txt
+# The application is mounted at the image root, so the SQLite fallback must
+# not be placed at the project root as it is in a local checkout. It goes under
+# the unprivileged user's home, which is the only guaranteed writable path.
+# Mount a volume here in production, or supply DATABASE_URL and skip it.
+RUN mkdir -p /home/cloudpulse/instance \
+    && chown -R cloudpulse:cloudpulse /home/cloudpulse
 
-# Copy application source code
-COPY . .
+VOLUME ["/home/cloudpulse/instance"]
 
-# Application port
+USER cloudpulse
+
 EXPOSE 5000
 
-# Run Flask through Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "app:app"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD ["python", "-c", "import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health',timeout=4).status==200 else 1)"]
+
+# Gunicorn runs a single worker with threads so the in-process scheduler
+# and the Prometheus counters stay consistent per process.
+CMD ["gunicorn", \
+     "--bind", "0.0.0.0:5000", \
+     "--workers", "1", \
+     "--threads", "8", \
+     "--worker-class", "gthread", \
+     "--timeout", "60", \
+     "--graceful-timeout", "30", \
+     "--keep-alive", "5", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
+     "--capture-output", \
+     "app:app"]

@@ -1,0 +1,40 @@
+{{- if .Values.monitoring.serviceMonitor.enabled -}}
+{{/*
+Requires the Prometheus Operator CRDs. Set monitoring.serviceMonitor.enabled to
+false on a cluster without them.
+*/}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "cloudpulse.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "cloudpulse.labels" . | nindent 4 }}
+    app: cloudpulse
+    {{- with .Values.monitoring.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  selector:
+    matchLabels:
+      {{- include "cloudpulse.selectorLabels" . | nindent 6 }}
+      app: cloudpulse
+  endpoints:
+    - port: {{ .Values.service.appProtocol | default "http" }}
+      path: {{ .Values.monitoring.serviceMonitor.path }}
+      scheme: {{ .Values.monitoring.serviceMonitor.scheme }}
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+      scrapeTimeout: {{ .Values.monitoring.serviceMonitor.scrapeTimeout }}
+      honorLabels: {{ .Values.monitoring.serviceMonitor.honorLabels }}
+      {{- with .Values.monitoring.serviceMonitor.relabelings }}
+      relabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.monitoring.serviceMonitor.metricRelabelings }}
+      metricRelabelings:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
