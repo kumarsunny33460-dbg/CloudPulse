@@ -111,17 +111,23 @@ jobs:
           print(f"{len(paths)} YAML files parsed")
           PY
 
+      # Both images ship the binary but not as their entrypoint:
+      # prom/prometheus runs /bin/prometheus, so appending "promtool ..." to the
+      # command produces "prometheus: error: unexpected promtool". --entrypoint
+      # is what makes the validator actually run.
       - name: Validate the Prometheus and Alertmanager configuration
         run: |
           docker run --rm \
+            --entrypoint promtool \
             -v "$PWD/monitoring:/etc/prometheus:ro" \
             prom/prometheus:v2.54.1 \
-            promtool check config /etc/prometheus/prometheus.yml
+            check config /etc/prometheus/prometheus.yml
 
           docker run --rm \
+            --entrypoint amtool \
             -v "$PWD/monitoring:/etc/alertmanager:ro" \
             prom/alertmanager:v0.27.0 \
-            amtool check-config /etc/alertmanager/alertmanager.yml
+            check-config /etc/alertmanager/alertmanager.yml
 
   # ==========================================================
   # JOB 3 — TEST
