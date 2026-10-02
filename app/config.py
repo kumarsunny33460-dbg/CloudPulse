@@ -353,40 +353,74 @@ def _looks_like_placeholder_key(value: str | None) -> bool:
     return any(marker in lowered for marker in ("replace-me", "changeme", "your-secret"))
 
 
+def secret_key_problem() -> str | None:
+    """Describe why the signing key is unusable, or ``None`` when it is fine.
+
+    Split out from :func:`validate_config` so the same rules can drive both the
+    hard stop and the diagnostic mode. A hosted platform reports a crashed
+    worker as a bare 503, which tells the operator nothing; naming the exact
+    variable in the page they already have open is the difference between a
+    five minute fix and an evening.
+    """
+    key = (env_str("SECRET_KEY") or "").strip()
+
+    if not key:
+        return (
+            "SECRET_KEY is not set. In Render: open your service, go to the "
+            "Environment tab, click Add, set the key to SECRET_KEY, press "
+            "Generate for the value, then Save and hit Manual Deploy."
+        )
+
+    if _looks_like_placeholder_key(key):
+        return (
+            f"SECRET_KEY is set to {key!r}, which is a value published in this "
+            "repository. Anyone who can read it can forge a session cookie and "
+            "sign in as any user. Replace it with a generated value."
+        )
+
+    if len(key) < 32:
+        return (
+            f"SECRET_KEY is only {len(key)} characters; the minimum is 32. "
+            "Press Generate in the Render dashboard rather than typing one."
+        )
+
+    return None
+
+
 def validate_config(name: str, settings) -> None:
     """Fail fast on a configuration that would be unsafe in production.
 
     ``app.config.from_object`` never instantiates a config class, so the check
     cannot live in a constructor; ``create_app`` calls this instead.
+
+    When ``CLOUDPULSE_DIAGNOSTIC_MODE`` is on, a bad key does not raise. The
+    application starts with an ephemeral key that cannot sign a usable session
+    and serves a page explaining the fix. Nothing is reachable behind it, so this
+    trades nothing away in exchange for a deploy that is self-explanatory.
     """
     if name != "production":
         return
 
-    key = env_str("SECRET_KEY")
+    if env_bool("ALLOW_INSECURE_SECRET_KEY", False):
+        return
 
-    if not key and not env_bool("ALLOW_INSECURE_SECRET_KEY", False):
-        raise RuntimeError(
-            "SECRET_KEY must be set when APP_ENV=production. Generate one with: "
-            'python -c "import secrets; print(secrets.token_urlsafe(48))"'
-        )
+    problem = secret_key_problem()
+    if problem is None:
+        _warn_about_production_posture(settings)
+        return
 
-    if _looks_like_placeholder_key(key) and not env_bool(
-        "ALLOW_INSECURE_SECRET_KEY", False
-    ):
-        raise RuntimeError(
-            f"SECRET_KEY is set to {key!r}, which is a placeholder published in "
-            "this repository. Anyone who can read it can forge session cookies "
-            "for this deployment. Generate a real one with: "
-            'python -c "import secrets; print(secrets.token_urlsafe(48))", or set '
-            "ALLOW_INSECURE_SECRET_KEY=true to bypass this deliberately."
-        )
+    if env_bool("CLOUDPULSE_DIAGNOSTIC_MODE", True):
+        logger.error("Starting in diagnostic mode: %s", problem)
+        return
 
-    if len(key or "") < 32 and not env_bool("ALLOW_INSECURE_SECRET_KEY", False):
-        raise RuntimeError(
-            "SECRET_KEY must be at least 32 characters in production. Generate "
-            'one with: python -c "import secrets; print(secrets.token_urlsafe(48))"'
-        )
+    raise RuntimeError(
+        "SECRET_KEY is unusable in production. Generate one with: "
+        'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+    )
 
+
+def _warn_about_production_posture(settings) -> None:
+    """Log the production settings that are weaker than they should be."""
     if not settings.get("SESSION_COOKIE_SECURE"):
         logger.warning(
             "SESSION_COOKIE_SECURE is disabled in production; session cookies "

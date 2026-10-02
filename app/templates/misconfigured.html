@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>CloudPulse | One setting required</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                         Arial, sans-serif;
+            background: #020617;
+            color: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+        }
+
+        .wrap {
+            width: 100%;
+            max-width: 620px;
+        }
+
+        .card {
+            background: rgba(15, 23, 42, 0.94);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 18px;
+            padding: 36px;
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.45);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 26px;
+        }
+
+        .brand-icon {
+            width: 46px;
+            height: 46px;
+            border-radius: 13px;
+            background: linear-gradient(135deg, #38bdf8, #6366f1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .brand-name {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(251, 191, 36, 0.12);
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            color: #fcd34d;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 18px;
+        }
+
+        h1 {
+            font-size: 26px;
+            margin-bottom: 12px;
+            letter-spacing: -0.02em;
+        }
+
+        .reason {
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 12px;
+            padding: 16px 18px;
+            color: #bae6fd;
+            font-size: 14px;
+            line-height: 1.65;
+            margin-bottom: 26px;
+        }
+
+        h2 {
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        ol {
+            padding-left: 22px;
+            margin-bottom: 24px;
+        }
+
+        ol li {
+            color: #cbd5e1;
+            font-size: 14.5px;
+            line-height: 1.9;
+            margin-bottom: 4px;
+        }
+
+        ol li strong {
+            color: #f8fafc;
+        }
+
+        .env-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 26px;
+            font-size: 13.5px;
+        }
+
+        .env-table th,
+        .env-table td {
+            text-align: left;
+            padding: 9px 12px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+        }
+
+        .env-table th {
+            color: #94a3b8;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .env-table td {
+            color: #e2e8f0;
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+        }
+
+        .env-table td:first-child {
+            color: #7dd3fc;
+            font-weight: 600;
+        }
+
+        code {
+            background: rgba(148, 163, 184, 0.14);
+            padding: 2px 6px;
+            border-radius: 5px;
+            font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+            font-size: 13px;
+        }
+
+        pre {
+            background: #020617;
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 10px;
+            padding: 14px 16px;
+            overflow-x: auto;
+            margin-bottom: 26px;
+        }
+
+        pre code {
+            background: none;
+            padding: 0;
+            color: #86efac;
+            font-size: 13px;
+        }
+
+        .note {
+            border-top: 1px solid rgba(148, 163, 184, 0.14);
+            padding-top: 22px;
+            color: #94a3b8;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .note a {
+            color: #38bdf8;
+            text-decoration: none;
+        }
+
+        .note a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 520px) {
+            .card {
+                padding: 24px;
+            }
+
+            h1 {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="wrap">
+
+        <div class="card">
+
+            <div class="brand">
+                <div class="brand-icon">☁</div>
+                <div class="brand-name">CloudPulse</div>
+            </div>
+
+            <span class="badge">One setting required</span>
+
+            <h1>The application is running, but not yet configured</h1>
+
+            <div class="reason">
+                {{ reason }}
+            </div>
+
+            <h2>How to fix it on Render</h2>
+
+            <ol>
+                <li>Open your service in the Render dashboard.</li>
+                <li>Go to the <strong>Environment</strong> tab.</li>
+                <li>Click <strong>Add</strong>, then set
+                    <code>SECRET_KEY</code> as the key.</li>
+                <li>For the value, press the <strong>Generate</strong> button.
+                    Do not type one by hand.</li>
+                <li>Click <strong>Save</strong>, then
+                    <strong>Manual Deploy</strong>.</li>
+            </ol>
+
+            <h2>Or set these all at once</h2>
+
+            <table class="env-table">
+                <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>SECRET_KEY</td>
+                        <td>press Generate</td>
+                    </tr>
+                    <tr>
+                        <td>APP_ENV</td>
+                        <td>production</td>
+                    </tr>
+                    <tr>
+                        <td>AUTO_CREATE_SCHEMA</td>
+                        <td>true</td>
+                    </tr>
+                    <tr>
+                        <td>SESSION_COOKIE_SECURE</td>
+                        <td>false</td>
+                    </tr>
+                    <tr>
+                        <td>ENABLE_SCHEDULER</td>
+                        <td>true</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h2>Or generate the key locally</h2>
+
+            <pre><code>python -c "import secrets; print(secrets.token_urlsafe(48))"</code></pre>
+
+            <div class="note">
+                Nothing is exposed while the key is unset: every route except
+                this page and <code>/health</code> returns
+                <code>503</code> by design. No session can be created, so there
+                is nothing to sign and nothing to forge.
+                <br><br>
+                This is also why a key published in the repository is refused —
+                a known signing key would let anyone sign in as any user. See
+                <a href="https://github.com/kumarsunny33460-dbg/CloudPulse">the
+                repository</a> for the full setup.
+            </div>
+
+        </div>
+
+    </div>
+
+</body>
+</html>

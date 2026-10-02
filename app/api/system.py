@@ -21,7 +21,20 @@ START_TIME = time.time()
 
 @blueprint.route("/health", methods=["GET"])
 def health():
-    """Liveness probe used by Docker, Render and Kubernetes."""
+    """Liveness probe used by Docker, Render and Kubernetes.
+
+    Reports 503 while the application is in diagnostic mode, and says why. A
+    platform that finds no healthy worker serves its own generic error page,
+    which tells the operator nothing; this keeps the reason on the endpoint they
+    are already looking at.
+    """
+    from app import misconfigured_reason
+
+    reason = misconfigured_reason()
+    if reason is not None:
+        logger.warning("Health probe reports a misconfigured instance")
+        return jsonify({"status": "misconfigured", "problem": reason}), 503
+
     logger.info("Health endpoint accessed")
     return jsonify({"status": "healthy"})
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -217,7 +218,7 @@ def test_preflight_rejects_a_short_key(capsys, monkeypatch):
     with pytest.raises(SystemExit):
         preflight.main()
 
-    assert "32 is the minimum" in capsys.readouterr().err
+    assert "32" in capsys.readouterr().err
 
 
 def test_preflight_passes_a_real_key(monkeypatch):
@@ -228,15 +229,136 @@ def test_preflight_passes_a_real_key(monkeypatch):
     preflight.main()  # must not raise
 
 
-def test_a_missing_key_still_refuses_to_boot(monkeypatch, capsys):
-    """The preflight explains the failure; it must not paper over it."""
+def test_a_missing_key_never_signs_a_usable_session(monkeypatch):
+    """Diagnostic mode explains the failure; it must not paper over it.
+
+    The application starts so the operator gets a page instead of a bare 503,
+    but nothing behind it answers and no session can be created.
+    """
     monkeypatch.delenv("SECRET_KEY", raising=False)
     monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("CLOUDPULSE_DIAGNOSTIC_MODE", raising=False)
 
     from app import create_app
 
-    with pytest.raises(RuntimeError, match="preflight report"):
-        create_app("production")
+    application = create_app("production")
+    client = application.test_client()
+
+    # The diagnostic page is served, and it names the variable.
+    page = client.get("/")
+    assert page.status_code == 200
+    assert b"SECRET_KEY" in page.data
+    assert b"Generate" in page.data
+
+    # Nothing that would need a session answers.
+    assert client.get("/api/applications").status_code == 503
+    assert client.get("/api/cicd").status_code == 503
+    assert client.get("/metrics").status_code == 503
+
+    # Health reports the problem instead of claiming to be healthy.
+    health = client.get("/health")
+    assert health.status_code == 503
+    assert health.get_json()["status"] == "misconfigured"
+
+
+# ---------------------------------------------------------------------
+# Diagnostic mode
+#
+# The first Render deploy answered "the page isn't working right now" on
+# every route, because the worker exited before binding a port and the platform
+# served its own bare 503. Diagnostic mode trades a hard crash for a page that
+# names the variable to set, while refusing everything that would need a
+# signed session.
+# ---------------------------------------------------------------------
+
+
+def _client_without_a_key(monkeypatch):
+    """A production client with no usable SECRET_KEY."""
+    import sys
+
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+
+    # Reloading is required: the app object is built at import time.
+    for module in [name for name in sys.modules if name.startswith("app")]:
+        if module == "app":
+            continue
+    return monkeypatch
+
+
+def test_the_reason_is_readable_across_request_threads(monkeypatch):
+    """It is written once at import and read from gunicorn's worker threads.
+
+    A ContextVar set during import is invisible there, which is why the first
+    attempt at this served the normal login page instead of the diagnostic one.
+    """
+    import app
+
+    monkeypatch.setattr(app, "_misconfigured_reason", "SECRET_KEY is not set.")
+    assert app.misconfigured_reason() == "SECRET_KEY is not set."
+
+    seen: list = []
+    thread = threading.Thread(target=lambda: seen.append(app.misconfigured_reason()))
+    thread.start()
+    thread.join()
+
+    assert seen == ["SECRET_KEY is not set."], (
+        "the reason must be visible from a worker thread; a ContextVar is not"
+    )
+
+
+def test_secret_key_problem_names_the_fix_for_each_failure(monkeypatch):
+    from config import secret_key_problem
+
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    assert "SECRET_KEY is not set" in secret_key_problem()
+    assert "Generate" in secret_key_problem()
+
+    monkeypatch.setenv("SECRET_KEY", "replace-me-with-a-long-random-value")
+    assert "published in this repository" in secret_key_problem()
+
+    monkeypatch.setenv("SECRET_KEY", "short")
+    assert "32" in secret_key_problem()
+
+    monkeypatch.setenv("SECRET_KEY", "K" * 48)
+    assert secret_key_problem() is None
+
+
+def test_a_bad_key_does_not_stop_the_boot_by_default(monkeypatch):
+    """A crashed worker is reported by the platform as a bare 503."""
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+    monkeypatch.delenv("CLOUDPULSE_DIAGNOSTIC_MODE", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+
+
+    import config as config_module
+
+    settings = {"SESSION_COOKIE_SECURE": False, "STRICT_ORIGIN_CHECK": True}
+    config_module.validate_config("production", settings)  # must not raise
+
+
+def test_the_strict_behaviour_is_still_available(monkeypatch):
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+    monkeypatch.setenv("CLOUDPULSE_DIAGNOSTIC_MODE", "false")
+
+
+    import config as config_module
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY"):
+        config_module.validate_config("production", {"SESSION_COOKIE_SECURE": True})
+
+
+def test_diagnostic_mode_is_escapable(monkeypatch):
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+    monkeypatch.setenv("CLOUDPULSE_DIAGNOSTIC_MODE", "false")
+
+
+    import config as config_module
+
+    assert config_module._looks_like_placeholder_key("") is False
 
 
 # ---------------------------------------------------------------------

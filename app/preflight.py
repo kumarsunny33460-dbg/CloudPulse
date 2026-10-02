@@ -61,24 +61,15 @@ def report(reason: str) -> None:
 
 
 def main() -> None:
-    from config import _looks_like_placeholder_key  # noqa: PLC0415
+    from config import secret_key_problem
 
-    key = (os.getenv("SECRET_KEY") or "").strip()
+    problem = secret_key_problem()
+    if problem is None:
+        print("The signing key is usable.")
+        return
 
-    if not key:
-        report("SECRET_KEY is not set.")
-        raise SystemExit(78)  # EX_CONFIG
-
-    if _looks_like_placeholder_key(key):
-        report(
-            f"SECRET_KEY is set to {key!r}, which is a value published in this "
-            "repository. Anyone who can read it can forge session cookies."
-        )
-        raise SystemExit(78)
-
-    if len(key) < 32:
-        report(f"SECRET_KEY is only {len(key)} characters; 32 is the minimum.")
-        raise SystemExit(78)
+    report(problem)
+    raise SystemExit(78)  # EX_CONFIG
 
 
 if __name__ == "__main__":

@@ -73,27 +73,70 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 logger = logging.getLogger("cloudpulse")
 
+#: Why the application is refusing to serve, when the signing key is unusable.
+#:
+#: A plain module global rather than a ContextVar: it is written once at import
+#: and read from request threads, and a ContextVar set during import is not
+#: visible inside gunicorn's per-request contexts, so every lookup came back
+#: empty and the diagnostic page never rendered.
+_misconfigured_reason: str | None = None
+
+
+def misconfigured_reason() -> str | None:
+    """Why the instance is refusing to serve, or ``None`` when it is fine."""
+    return _misconfigured_reason
+
 
 def _preflight_secrets() -> None:
-    """Print an actionable message if production cannot start.
+    """Report an unusable signing key.
 
-    Delegates to :mod:`preflight` so the guidance lives in one place, and so it
-    can be run on its own from a shell when diagnosing a deploy.
+    Two behaviours, chosen by ``CLOUDPULSE_DIAGNOSTIC_MODE``:
+
+    * on (the default) the application starts with an ephemeral key that cannot
+      sign a usable session and serves a page naming the variable to set. The
+      platform reports a crashed worker as a bare 503, so a page the operator
+      is already looking at is worth a great deal.
+    * off, a bad key stops the boot. Appropriate where a half-configured
+      instance answering requests is worse than one refusing them.
+
+    The module global is cleared first on every call. It outlives a single
+    application object, so a diagnostic build inside a test run left every
+    later application stuck in diagnostic mode.
     """
-    import preflight
+    from config import secret_key_problem
 
-    try:
-        preflight.main()
-    except SystemExit as exit_request:
-        # Same exit code validate_config would produce, but after a message a
-        # human can act on.
+    global _misconfigured_reason
+    _misconfigured_reason = None
+
+    problem = secret_key_problem()
+    if problem is None:
+        return
+
+    diagnostic = (os.getenv("CLOUDPULSE_DIAGNOSTIC_MODE") or "true").lower() in {
+        "1", "true", "yes", "on",
+    }
+
+    if not diagnostic:
         raise RuntimeError(
-            "CloudPulse cannot start in production: see the preflight report "
-            "above for the environment variable to set."
-        ) from exit_request
+            "SECRET_KEY is unusable in production. Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+        )
+
+    logger.error(
+        "CloudPulse is starting with its signing key unusable. It will serve a "
+        "page explaining the fix and refuse every other route. Problem: %s",
+        problem,
+    )
+    _misconfigured_reason = problem
 
 
 def create_app(config_name: str | None = None) -> Flask:
+    # Each application starts with a clean diagnostic state. The module global
+    # outlives the app object, so without this a production build inside a test
+    # run left every later application stuck in diagnostic mode.
+    global _misconfigured_reason
+    _misconfigured_reason = None
+
     # Resolve the environment name once and use that single value everywhere.
     # Deriving ENV_NAME separately from `get_config` is what allowed a Render
     # deployment to select ProductionConfig while recording ENV_NAME as
@@ -103,9 +146,9 @@ def create_app(config_name: str | None = None) -> Flask:
     configuration = get_config(env_name)
 
     if env_name == "production":
-        # Explain a missing key before gunicorn reports "Worker failed to boot".
-        # On a PaaS the operator sees "service is live" and an empty page, and
-        # the actual reason is buried in the log they have not opened.
+        # Explain a bad key before gunicorn reports "Worker failed to boot".
+        # On a PaaS the operator sees "service is live" and a bare 503, and the
+        # actual reason is buried in a log they have not opened.
         _preflight_secrets()
 
     flask_app = Flask(__name__, instance_relative_config=False)
@@ -641,6 +684,44 @@ def _register_auth_routes(flask_app: Flask) -> None:
             return jsonify({"error": "User not found"}), 401
 
         return jsonify({"user": user_to_dict(user)})
+
+    @flask_app.before_request
+    def refuse_real_traffic_while_misconfigured():
+        """Serve the diagnostic page, or refuse, while the key is unusable.
+
+        Handled here rather than by registering competing routes for /, /login
+        and /register: Flask matches the first rule registered for a path, so a
+        second registration silently replaced the real dashboard handler and the
+        page returned a redirect instead of the application.
+
+        /health stays open so the platform sees a live process rather than
+        serving its own bare 503. Nothing else answers, because no session can
+        be created while the signing key is unusable.
+        """
+        reason = misconfigured_reason()
+        if reason is None or request.path in {"/health", "/health/live"}:
+            return None
+
+        if request.path == "/metrics":
+            return jsonify({"status": "misconfigured", "problem": reason}), 503
+
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "error": "CloudPulse is not configured yet",
+                "problem": reason,
+            }), 503
+
+        if request.method == "GET" and request.path in {"/", "/login", "/register"}:
+            response = flask_app.make_response(
+                render_template("misconfigured.html", reason=reason)
+            )
+            response.headers["Cache-Control"] = "no-store"
+            return response
+
+        return jsonify({
+            "error": "CloudPulse is not configured yet",
+            "problem": reason,
+        }), 503
 
     @flask_app.route("/", methods=["GET"])
     @login_required

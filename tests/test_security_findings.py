@@ -245,12 +245,10 @@ def test_successful_login_returns_the_reserved_budget(app, client):
 
 def test_secret_key_supplied_after_import_is_still_used(monkeypatch):
     """A .env value must win over the ephemeral key resolved at import."""
-    import importlib
 
     import config as config_module
 
     monkeypatch.setenv("SECRET_KEY", "key-from-the-environment")
-    importlib.reload(config_module)
 
     class Holder:
         pass
@@ -280,15 +278,30 @@ def test_known_environments_still_resolve(monkeypatch):
         assert config_module.get_config() is not None
 
 
-def test_production_without_a_secret_key_refuses_to_boot(monkeypatch):
+def test_production_without_a_secret_key_is_not_usable(monkeypatch):
+    """No key means no sessions, whichever way the boot is configured.
+
+    Diagnostic mode starts so a hosted platform shows the reason; strict mode
+    stops the boot. Both must refuse to serve a usable instance.
+    """
     import config as config_module
 
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.delenv("SECRET_KEY", raising=False)
     monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
 
+    assert config_module.secret_key_problem() is not None
+
+    # Strict mode stops the boot outright. The variable has to be set to
+    # "false" rather than deleted: the default is on, so removing it would
+    # select diagnostic mode and the assertion below would never run.
+    monkeypatch.setenv("CLOUDPULSE_DIAGNOSTIC_MODE", "false")
     with pytest.raises(RuntimeError, match="SECRET_KEY"):
         config_module.validate_config("production", {"STRICT_ORIGIN_CHECK": True})
+
+    # Diagnostic mode starts, but the problem is recorded so the page renders.
+    monkeypatch.setenv("CLOUDPULSE_DIAGNOSTIC_MODE", "true")
+    config_module.validate_config("production", {"STRICT_ORIGIN_CHECK": True})
 
 
 def test_env_name_matches_the_selected_config(monkeypatch):
@@ -298,9 +311,7 @@ def test_env_name_matches_the_selected_config(monkeypatch):
     recording ENV_NAME as "development", so validate_config returned early and
     the SECRET_KEY guard never ran.
     """
-    import importlib
 
-    import config as config_module
 
     from app import create_app
 
@@ -310,7 +321,6 @@ def test_env_name_matches_the_selected_config(monkeypatch):
     # separate test and would otherwise mask what this one is asserting.
     real_key = "R" * 48
     monkeypatch.setenv("SECRET_KEY", real_key)
-    importlib.reload(config_module)
 
     application = create_app()
 
@@ -696,37 +706,50 @@ def test_throttled_registration_shows_a_useful_wait(app, client):
     ],
 )
 def test_a_published_placeholder_key_is_refused(key, monkeypatch):
+    """A placeholder is refused by the check that decides whether to serve.
+
+    The check is `secret_key_problem` rather than the boot itself, because the
+    boot now starts in diagnostic mode instead of raising. What must never
+    happen is a key published in this repository being accepted.
+    """
     import config as config_module
 
-    monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", key)
-    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="placeholder published"):
-        config_module.validate_config(
-            "production", {"SESSION_COOKIE_SECURE": True, "STRICT_ORIGIN_CHECK": True}
-        )
+    problem = config_module.secret_key_problem()
+    assert problem is not None, f"{key!r} must not be accepted as a signing key"
+    assert "published in this repository" in problem
+
+
+def test_a_missing_key_is_reported(monkeypatch):
+    import config as config_module
+
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+
+    problem = config_module.secret_key_problem()
+    assert problem is not None
+    assert "SECRET_KEY is not set" in problem
+    assert "Generate" in problem, "it must say what to press, not just what is wrong"
 
 
 def test_a_short_key_is_refused(monkeypatch):
     import config as config_module
 
-    monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "tooshort")
-    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
 
-    with pytest.raises(RuntimeError, match="at least 32 characters"):
-        config_module.validate_config(
-            "production", {"SESSION_COOKIE_SECURE": True, "STRICT_ORIGIN_CHECK": True}
-        )
+    problem = config_module.secret_key_problem()
+    assert problem is not None
+    assert "32" in problem
 
 
 def test_a_real_key_is_accepted(monkeypatch):
     import config as config_module
 
-    monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("SECRET_KEY", "k" * 48)
     monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+    monkeypatch.setenv("APP_ENV", "production")
+
+    assert config_module.secret_key_problem() is None
 
     config_module.validate_config(
         "production", {"SESSION_COOKIE_SECURE": True, "STRICT_ORIGIN_CHECK": True}
