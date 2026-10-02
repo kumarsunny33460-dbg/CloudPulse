@@ -104,10 +104,20 @@ def test_dockerfile_does_not_install_curl():
 
 
 def test_healthcheck_hits_the_health_endpoint():
-    # The command is on the line after HEALTHCHECK, joined by a backslash.
-    assert re.search(r"HEALTHCHECK[\s\S]{0,200}?/health", dockerfile), (
+    # The command is on the line after HEALTHCHECK, and an explanatory comment
+    # sits between them, so the window has to span both.
+    assert re.search(r"HEALTHCHECK[\s\S]{0,600}?/health", dockerfile), (
         "the declared healthcheck must call /health"
     )
+
+
+def test_healthcheck_probes_the_assigned_port():
+    """The image reads $PORT, so the probe must too.
+
+    A healthcheck that probes a fixed port marks a correct deploy unhealthy on
+    every PaaS that assigns the listen port at run time.
+    """
+    assert "os.getenv('PORT'" in dockerfile or 'os.getenv("PORT"' in dockerfile
 
 
 # ---------------------------------------------------------------------

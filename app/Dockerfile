@@ -65,22 +65,32 @@ VOLUME ["/home/cloudpulse/instance"]
 
 USER cloudpulse
 
+# Render, Heroku, Railway and Cloud Run all assign the listen port at run time
+# through PORT and route traffic to whatever it contains. A hardcoded 5000 gets
+# the container started and then unreachable, so the default below is only a
+# fallback for a plain `docker run -p 5000:5000`.
+ENV PORT=5000
+
+# Documentation only; the runtime port comes from $PORT.
 EXPOSE 5000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD ["python", "-c", "import sys,urllib.request;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health',timeout=4).status==200 else 1)"]
+    CMD ["python", "-c", "import os,sys,urllib.request;port=os.getenv('PORT','5000');sys.exit(0 if urllib.request.urlopen(f'http://127.0.0.1:{port}/health',timeout=4).status==200 else 1)"]
 
 # Gunicorn runs a single worker with threads so the in-process scheduler
 # and the Prometheus counters stay consistent per process.
-CMD ["gunicorn", \
-     "--bind", "0.0.0.0:5000", \
-     "--workers", "1", \
-     "--threads", "8", \
-     "--worker-class", "gthread", \
-     "--timeout", "60", \
-     "--graceful-timeout", "30", \
-     "--keep-alive", "5", \
-     "--access-logfile", "-", \
-     "--error-logfile", "-", \
-     "--capture-output", \
-     "app:app"]
+#
+# Shell form rather than exec form, because only the shell expands $PORT.
+# Every argument is unquoted for the same reason; none of them contain spaces.
+CMD gunicorn \
+     --bind 0.0.0.0:${PORT:-5000} \
+     --workers 1 \
+     --threads 8 \
+     --worker-class gthread \
+     --timeout 60 \
+     --graceful-timeout 30 \
+     --keep-alive 5 \
+     --access-logfile - \
+     --error-logfile - \
+     --capture-output \
+     app:app

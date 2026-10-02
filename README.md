@@ -660,6 +660,43 @@ endpoint answers and that the process is not root.
 
 ---
 
+## Deploy to Render (free)
+
+`render.yaml` is a Render blueprint, so the whole service plus its database is
+provisioned from this repository without typing anything into a dashboard.
+
+1. Push the code, then sign in at [dashboard.render.com](https://dashboard.render.com)
+2. **New → Blueprint**, select this repository
+3. Render reads `render.yaml`, creates a `free` web service and a `free`
+   Postgres, generates a `SECRET_KEY`, and wires `DATABASE_URL` to the database
+4. When the deploy finishes the URL is
+   `https://cloudpulse.onrender.com`
+
+Sign up on the `/register` page; the first account created becomes the Admin.
+
+Two things the image does that matter for a PaaS:
+
+- **Gunicorn binds to `0.0.0.0:${PORT:-5000}`** and the healthcheck probes the
+  same variable. Render assigns the port at run time, so a literal `5000` starts
+  a container that is then unreachable.
+- **`SESSION_COOKIE_SECURE=false`** in the blueprint. Render terminates TLS and
+  forwards over plain HTTP; with the flag on, browsers refuse to store the
+  session cookie and login silently fails.
+
+Limitations of the free tier, so nobody is surprised:
+
+| | |
+|---|---|
+| Spin down | Idle services sleep after 15 minutes and wake on the next request, which takes ~30 seconds. The first request after an idle period will look slow. |
+| Free Postgres | Expires after 30 days. The blueprint recreates it, but the data does not come back. |
+| Single instance | One replica, so the in-process scheduler and the Prometheus counters stay consistent, but there is no failover. |
+| Ephemeral filesystem | Only matters if `DATABASE_URL` is unset and SQLite is used, which the blueprint does not do. |
+
+`tests/test_render_deploy.py` builds the image, runs it on port 10000, and
+asserts every public endpoint answers.
+
+---
+
 ## CI/CD
 
 `.github/workflows/docker-ci.yml` runs five jobs on every push and pull

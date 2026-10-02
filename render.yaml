@@ -1,0 +1,113 @@
+# Render blueprint for CloudPulse.
+#
+# Deploy: Render dashboard -> New -> Blueprint -> point at this repository.
+# Render reads this file and provisions the service, the database and the
+# environment variables, so nothing has to be typed into the dashboard by hand.
+#
+# A manual deploy is also possible (New -> Web Service -> connect the repo),
+# but then every value in `services[].envVars` below has to be entered by hand
+# and it is easy to miss the SECRET_KEY one, which stops the boot.
+
+services:
+  - type: web
+    name: cloudpulse
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./app/Dockerfile
+    dockerContext: ./app
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      # ----------------------------------------------------------------
+      # Required
+      # ----------------------------------------------------------------
+
+      # APP_ENV=production makes CloudPulse refuse to start without a real
+      # key: it rejects both a missing SECRET_KEY and any placeholder published
+      # in this repository, because anyone can read this repo and would
+      # otherwise be able to forge session cookies. generateValue runs once and
+      # stores the result, so this does not change on every deploy.
+      - key: APP_ENV
+        value: production
+
+      - key: SECRET_KEY
+        generateValue: true
+
+      # The free Postgres instance. CloudPulse's DATABASE_URL parser rewrites
+      # postgres:// to postgresql://, so this form is accepted.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cloudpulse-db
+          property: connectionString
+
+      # ----------------------------------------------------------------
+      # Schema
+      #
+      # The free database starts empty, and the application is launched with
+      # migrations not run. AUTO_CREATE_SCHEMA builds the tables on first
+      # boot. Leave it off and run `flask --app app db upgrade` instead once a
+      # migration path is in place.
+      # ----------------------------------------------------------------
+      - key: AUTO_CREATE_SCHEMA
+        value: "true"
+      - key: AUTO_SCHEMA_SYNC
+        value: "true"
+
+      # ----------------------------------------------------------------
+      # Security
+      #
+      # Render terminates TLS and forwards over plain HTTP, so the cookie flag
+      # is off here. Turn it on only if the app is reached over HTTPS directly,
+      # otherwise browsers will refuse to store the session cookie at all.
+      # ----------------------------------------------------------------
+      - key: SESSION_COOKIE_SECURE
+        value: "false"
+      - key: CSRF_PROTECTION_ENABLED
+        value: "true"
+      - key: STRICT_ORIGIN_CHECK
+        value: "false"
+
+      # Render assigns the listen port through PORT and the image reads it.
+      # Nothing to set here; the Dockerfile handles it.
+
+      # ----------------------------------------------------------------
+      # Behaviour
+      # ----------------------------------------------------------------
+      - key: ENABLE_SCHEDULER
+        value: "true"
+      - key: MONITOR_INTERVAL_SECONDS
+        value: "60"
+      - key: HEALTH_CHECK_RETENTION_DAYS
+        value: "14"
+      - key: AUDIT_LOG_RETENTION_DAYS
+        value: "30"
+      - key: LOGIN_MAX_ATTEMPTS
+        value: "5"
+      - key: MIN_PASSWORD_LENGTH
+        value: "8"
+      - key: LOG_FORMAT
+        value: json
+      - key: LOG_LEVEL
+        value: INFO
+
+      # The public address is only known after the first deploy, because it is
+      # derived from the service name. Set it in the dashboard afterwards so
+      # that password reset links point at the real host rather than at the
+      # inbound request. Optional: leave unset and links use the request host.
+
+      # ----------------------------------------------------------------
+      # Alerting. Left empty because a real webhook is a live credential and
+      # must not be committed. Set NOTIFY_WEBHOOK_URL in the dashboard, or
+      # keep alerts in the dashboard's own Activity tab.
+      # ----------------------------------------------------------------
+      - key: NOTIFY_WEBHOOK_URL
+        value: ""
+
+databases:
+  - name: cloudpulse-db
+    plan: free
+    region: singapore
+    databaseName: cloudpulse
+    user: cloudpulse
