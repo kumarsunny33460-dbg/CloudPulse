@@ -759,14 +759,24 @@ def test_the_overlay_placeholder_is_covered():
     overlay = pathlib.Path("k8s/overlays/production/kustomization.yaml").read_text(
         encoding="utf-8"
     )
-    match = re.search(r"SECRET_KEY=(\S+)", overlay)
-    assert match, "SECRET_KEY not found in the production overlay"
 
-    assert config_module._looks_like_placeholder_key(match.group(1)), (
-        f"the overlay ships SECRET_KEY={match.group(1)!r}, which production would "
-        "accept. Either change the placeholder or add it to "
-        "INSECURE_PLACEHOLDER_KEYS."
-    )
+    # Only the literal that kustomize will render counts. A comment showing the
+    # command that generates a key also contains "SECRET_KEY=" and matching
+    # that would assert against a fragment of prose.
+    literals = [
+        line.strip()
+        for line in overlay.splitlines()
+        if line.strip().startswith("- SECRET_KEY=")
+    ]
+    assert literals, "the production overlay does not set SECRET_KEY at all"
+
+    for literal in literals:
+        value = literal.split("=", 1)[1]
+        assert config_module._looks_like_placeholder_key(value), (
+            f"the overlay ships SECRET_KEY={value!r}, which production would "
+            "accept. Either change the placeholder or add it to "
+            "INSECURE_PLACEHOLDER_KEYS."
+        )
 
 
 # ======================================================================
@@ -1020,7 +1030,6 @@ def test_json_formatter_stamps_utc_in_both_paths():
 
 
 def csrf_token_from(response):
-    import re
 
     match = re.search(r'name="csrf_token" value="([^"]+)"', response.data.decode())
     return match.group(1) if match else ""

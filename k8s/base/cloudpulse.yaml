@@ -113,37 +113,35 @@ data:
   # host name into the email whenever CloudPulse sits behind this Ingress.
   PUBLIC_BASE_URL: ""
 ---
-# Every value below is a placeholder and must be replaced before applying.
+# There is deliberately no Secret in this manifest.
 #
-#   SECRET_KEY    generate with: python -c "import secrets;print(secrets.token_urlsafe(48))"
-#                 CloudPulse refuses to start in production if this is left as a
-#                 placeholder, because this repository is public and the value is
-#                 therefore readable by anyone. Set ALLOW_INSECURE_SECRET_KEY=true
-#                 to override that deliberately.
-#   DATABASE_URL  cloudpulse-postgres is NOT defined in this manifest. Point it
-#                 at a managed RDS instance, or add the database to
-#                 docker-compose locally. An unreachable host here surfaces as
-#                 /health/ready returning 503, not as a startup error.
+# A committed Secret is a real Secret. Shipping one with a placeholder value
+# means the file either contains a usable credential or a value that CloudPulse
+# refuses to start with -- and the placeholder travels into every overlay that
+# does not explicitly replace it, which is exactly what happened: staging
+# rendered the base Secret verbatim and every pod died with
+# "SECRET_KEY is set to 'replace-me-with-a-long-random-value', which is a
+# placeholder published in this repository."
+#
+# Create it out of band instead:
+#
+#   kubectl create secret generic cloudpulse-secrets \
+#     --from-literal=SECRET_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(48))')" \
+#     --from-literal=DATABASE_URL='postgresql://cloudpulse:...@host:5432/cloudpulse' \
+#     --from-literal=NOTIFY_WEBHOOK_URL='' \
+#     --from-literal=NOTIFY_SMTP_HOST='' \
+#     --from-literal=NOTIFY_SMTP_PASSWORD=''
+#
+# The overlays each carry a secretGenerator that produces the same object, so
+# pick one source of truth. In production prefer a secrets manager (External
+# Secrets Operator, Secrets Store CSI Driver, or SOPS) over a literal Secret.
+#
+# DATABASE_URL is optional. Left empty, CloudPulse falls back to SQLite inside
+# the container, which is fine for a single-replica demo but is not durable and
+# must not be used for real data.
 #
 # The Ingress host cloudpulse.example.com is a placeholder in the same way; it
-# must match the real DNS name and the TLS secret named below must exist.
-#
-# In production inject these values from a secrets manager (External Secrets
-# Operator, Secrets Store CSI Driver, or SOPS) instead of committing them.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cloudpulse-secrets
-  namespace: cloudpulse
-  labels:
-    app: cloudpulse
-type: Opaque
-stringData:
-  SECRET_KEY: "replace-me-with-a-long-random-value"
-  DATABASE_URL: "postgresql://cloudpulse:cloudpulse@cloudpulse-postgres:5432/cloudpulse"
-  NOTIFY_WEBHOOK_URL: ""
-  NOTIFY_SMTP_HOST: ""
-  NOTIFY_SMTP_PASSWORD: ""
+# must match the real DNS name and its TLS secret must exist.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -177,9 +175,14 @@ spec:
       serviceAccountName: cloudpulse
       securityContext:
         runAsNonRoot: true
-        runAsUser: 10001
-        runAsGroup: 10001
-        fsGroup: 10001
+        # Must match the user created by the Dockerfile. It creates "cloudpulse"
+        # as uid 999, so overriding this to a different number put the process
+        # on an id that owns nothing in the image: /home/cloudpulse is still
+        # owned by 999, and the SQLite fallback died at boot with
+        # "PermissionError: [Errno 13] Permission denied: '/home/cloudpulse/instance'".
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -247,6 +250,19 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # INSTANCE_DIR. The image declares VOLUME for this path, which is
+            # what a local `docker run` wants, but under Kubernetes that becomes
+            # an anonymous volume owned by root. The container runs as uid 999,
+            # so the SQLite fallback died at boot with
+            # "PermissionError: [Errno 13] /home/cloudpulse/instance".
+            #
+            # Mounting it explicitly fixes the ownership, and emptyDir is
+            # 0777 so the unprivileged user can write. The cost is that the
+            # data is gone when the pod restarts, which is the correct
+            # behaviour for a demo. Supply DATABASE_URL and mount a PersistentVolume
+            # (or a PVC claim) here for anything that must survive a restart.
+            - name: instance
+              mountPath: /home/cloudpulse/instance
       volumes:
         # Writable scratch space, required because the root filesystem is
         # read-only. gunicorn and the SQLite fallback both need a real
@@ -255,6 +271,9 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 256Mi
+        - name: instance
+          emptyDir:
+            sizeLimit: 1Gi
       terminationGracePeriodSeconds: 60
       topologySpreadConstraints:
         # Spread across availability zones first, then across nodes inside a

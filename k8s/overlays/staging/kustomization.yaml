@@ -47,3 +47,36 @@ patches:
     patch: |
       - op: remove
         path: /spec/template/spec/containers/0/livenessProbe
+
+# The base ships no Secret on purpose -- a committed Secret is a real Secret.
+# This generator produces it, and every value comes from an env file that is
+# never committed.
+#
+#   python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(48))" > k8s/overlays/staging/staging-secret.env
+#   # add the DATABASE_URL and NOTIFY_* entries
+#   kustomize build --load-env-file k8s/overlays/staging/staging-secret.env k8s/overlays/staging
+#
+# The literals below are inert fallbacks for `kubectl apply -k` without the flag.
+# CloudPulse refuses to start in production when SECRET_KEY is a placeholder,
+# which is the intended outcome: a missing secret should stop the deploy, not
+# quietly produce an instance whose sessions anyone can forge.
+#
+# DATABASE_URL empty means the SQLite fallback, which suits a single-replica
+# demo and nothing else.
+secretGenerator:
+  - name: cloudpulse-secrets
+    literals:
+      - SECRET_KEY=replace-me-with-a-long-random-value
+      - DATABASE_URL=
+      - NOTIFY_WEBHOOK_URL=
+      - NOTIFY_SMTP_HOST=
+      - NOTIFY_SMTP_PASSWORD=
+
+# Without this, kustomize appends a content hash to the generated name
+# (cloudpulse-secrets-ck5c46bt6f). That is correct for rolling an image, but it
+# means the Secret only exists as the output of `kustomize build`, and it left
+# the pods in CreateContainerConfigError waiting for a name nothing else
+# creates. A fixed name lets the Secret be created out of band by whatever
+# manages credentials.
+generatorOptions:
+  disableNameSuffixHash: true

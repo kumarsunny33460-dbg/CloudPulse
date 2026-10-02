@@ -56,16 +56,26 @@ patches:
       - op: add
         path: /data/ENABLE_SCHEDULER
         value: "true"
-  - patch: |
-      $patch: delete
-      apiVersion: v1
-      kind: Secret
-      metadata:
-        name: cloudpulse-secrets
-        namespace: cloudpulse
-
+  # The base no longer ships a Secret. The generator below produces the object
+# from an env file that is never committed:
+#
+#   python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(48))" > production-secret.env
+#   kustomize build --load-env-file production-secret.env k8s/overlays/production
+#
+# CloudPulse refuses to start in production with the placeholder below, which is
+# the intended outcome. Prefer a secrets manager here.
+#
+# There is deliberately no `$patch: delete` for the old base Secret. Kustomize
+# fails the whole build when a delete patch has no matching target, so the
+# instruction only worked while the base still declared one.
 secretGenerator:
   - name: cloudpulse-secrets
     literals:
       - SECRET_KEY=replace-me-with-a-long-random-value
       - DATABASE_URL=postgresql://cloudpulse:cloudpulse@cloudpulse-postgres:5432/cloudpulse
+
+# See the note in the staging overlay: a content-hash suffix would make the
+# generated name unpredictable and unreferenceable by anything but the build
+# itself.
+generatorOptions:
+  disableNameSuffixHash: true
