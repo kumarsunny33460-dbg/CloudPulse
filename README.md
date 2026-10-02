@@ -229,8 +229,9 @@ cp .env.example .env               # macOS / Linux
 python app/app.py
 ```
 
-Open <http://127.0.0.1:5000/register>, create the **first account** — that
-account automatically becomes the `Admin`. Every later account is a `Viewer`.
+Open `http://127.0.0.1:5000/register` in your browser and create the **first
+account** — that account automatically becomes the `Admin`. Every later account
+is a `Viewer`.
 
 ### Demo data
 
@@ -630,13 +631,20 @@ docker run -p 5000:5000 -e SECRET_KEY=dev-secret cloudpulse:local
 SECRET_KEY=$(python -c "import secrets;print(secrets.token_urlsafe(48))") docker compose up --build
 ```
 
-| Service | URL |
+Once the stack is up, these addresses are served on your machine:
+
+| Service | Address on your machine |
 | --- | --- |
-| CloudPulse | <http://localhost:5000> |
-| Prometheus | <http://localhost:9090> |
-| Grafana | <http://localhost:3000> (`admin` / `admin`) |
-| Alertmanager | <http://localhost:9093> |
-| Loki | <http://localhost:3100> |
+| CloudPulse | `http://localhost:5000` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` (`admin` / `admin`) |
+| Alertmanager | `http://localhost:9093` |
+| Loki | `http://localhost:3100` |
+
+They are shown as code rather than as links because they only exist once you
+run `docker compose up` on your own machine — clicking them here would just open
+a page on the reader's computer where nothing is listening. For a link that
+works from a browser anywhere, see [Deploy to Render](#deploy-to-render-free).
 
 The compose file sets `APP_ENV=production`, so it requires `SECRET_KEY` in the
 environment or `.env` rather than falling back to a default. The image is
