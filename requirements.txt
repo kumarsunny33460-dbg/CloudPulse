@@ -1,0 +1,15 @@
+# The application dependencies live in app/requirements.txt, next to the code
+# that imports them. This file exists so that a host which only looks at the
+# repository root -- Render's native Python builder among them -- still finds
+# what it needs.
+#
+#   pip install -r requirements.txt
+#
+# Render's Docker builder ignores this file and builds from ./app/Dockerfile
+# instead, which is what render.yaml selects.
+-r app/requirements.txt
+
+# Only needed by the host's native builder; the Docker image already contains
+# them. Pinned loosely so a resolver failure here is visible rather than silent.
+gunicorn>=22.0,<24.0
+psycopg2-binary>=2.9,<3.0

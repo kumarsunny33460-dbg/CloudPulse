@@ -170,6 +170,79 @@ def test_no_credential_is_hardcoded_in_the_blueprint(blueprint):
 
 
 # ---------------------------------------------------------------------
+# A host that only looks at the repository root
+#
+# Render looks for a Dockerfile in the root before anywhere else, and its
+# native Python builder looks for requirements.txt in the root. Neither existed,
+# so a manually created Web Service could not build at all.
+# ---------------------------------------------------------------------
+
+
+def test_a_requirements_file_exists_at_the_repository_root():
+    root_requirements = ROOT / "requirements.txt"
+    assert root_requirements.is_file(), (
+        "a host that builds without a Dockerfile needs requirements.txt at the "
+        "repository root; only app/requirements.txt existed"
+    )
+
+    text = root_requirements.read_text(encoding="utf-8")
+    assert "app/requirements.txt" in text, (
+        "the root requirements must include the real one rather than duplicate "
+        "the list, which would drift"
+    )
+    assert (ROOT / "app" / "requirements.txt").is_file()
+
+
+def test_a_dockerfile_exists_at_the_repository_root():
+    root_dockerfile = ROOT / "Dockerfile"
+    assert root_dockerfile.is_file(), (
+        "Render looks for ./Dockerfile before ./app/Dockerfile, so a default "
+        "Web Service finds nothing to build"
+    )
+
+    text = root_dockerfile.read_text(encoding="utf-8")
+
+    # It has to be a working build, not a stub: it copies from app/.
+    assert "COPY app/requirements.txt" in text
+    assert "0.0.0.0:${PORT:-5000}" in text, (
+        "the root Dockerfile must obey PORT for the same reason the other one does"
+    )
+
+
+def test_no_build_stage_is_named_build(dockerfile):
+    """Docker resolves --from against a stage and then against an image.
+
+    A stage named `build` made the root Dockerfile try to pull
+    docker.io/library/build:latest and fail with "pull access denied".
+    """
+    for path in (ROOT / "Dockerfile", DOCKERFILE):
+        text = path.read_text(encoding="utf-8")
+        stages = re.findall(r"(?im)^FROM\s+\S+\s+AS\s+(\S+)", text)
+        assert "build" not in stages, (
+            f"{path.name} names a stage 'build', which Docker tries to pull as "
+            f"an image; found stages: {stages}"
+        )
+
+        # Every stage except the last is an intermediate that something is
+        # copied from; the last one is the image that ships.
+        for stage in stages[:-1]:
+            assert f"--from={stage}" in text, (
+                f"{path.name} declares intermediate stage '{stage}' but nothing "
+                "is copied from it"
+            )
+
+
+def test_the_blueprint_does_not_pin_a_region(blueprint):
+    """A region that is unavailable on the account fails the whole blueprint."""
+    for section in (blueprint["services"], blueprint["databases"]):
+        for item in section:
+            assert "region" not in item, (
+                f"{item.get('name')} pins a region; let Render choose its "
+                "default so blueprint creation cannot fail on availability"
+            )
+
+
+# ---------------------------------------------------------------------
 # It must actually run the way Render will
 # ---------------------------------------------------------------------
 

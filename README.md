@@ -682,6 +682,35 @@ provisioned from this repository without typing anything into a dashboard.
 
 Sign up on the `/register` page; the first account created becomes the Admin.
 
+### If you created the service by hand instead
+
+A **Web Service** created through *New → Web Service* does **not** read
+`render.yaml`, so none of the environment variables below are set and the
+application refuses to start — `SECRET_KEY must be set when APP_ENV=production`
+is a deliberate stop, not a bug. Either delete that service and use the
+blueprint, or set these under *Environment*:
+
+| Key | Value |
+| --- | --- |
+| `APP_ENV` | `production` |
+| `SECRET_KEY` | *Generate* — Render has a **Generate** button next to the field. A short or placeholder value is rejected too. |
+| `DATABASE_URL` | Leave empty to use SQLite, or paste the internal connection string from a Render Postgres |
+| `AUTO_CREATE_SCHEMA` | `true` |
+| `SESSION_COOKIE_SECURE` | `false` |
+| `ENABLE_SCHEDULER` | `true` |
+
+Build settings, in case Render did not detect them:
+
+| Setting | Value |
+| --- | --- |
+| Runtime | Docker |
+| Dockerfile path | `./Dockerfile` (a root copy exists that forwards to `app/Dockerfile`) |
+| Docker context | `.` |
+| Health check path | `/health` |
+
+Both Dockerfiles were verified to build and to serve every public endpoint on an
+arbitrary port, so either path works.
+
 Two things the image does that matter for a PaaS:
 
 - **Gunicorn binds to `0.0.0.0:${PORT:-5000}`** and the healthcheck probes the
