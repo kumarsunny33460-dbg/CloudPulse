@@ -682,6 +682,45 @@ provisioned from this repository without typing anything into a dashboard.
 
 Sign up on the `/register` page; the first account created becomes the Admin.
 
+### "the page isn't working right now"
+
+The container starts, Render announces **Your service is live 🎉**, and every
+request fails. That combination means the web server is running but no worker
+ever finished booting, so nothing is listening on the port. Scroll up in the
+deploy log; the reason is above the "live" banner.
+
+The usual cause is one missing environment variable:
+
+```
+RuntimeError: SECRET_KEY must be set when APP_ENV=production
+No open HTTP ports detected on 0.0.0.0
+```
+
+CloudPulse refuses to start without a real signing key on purpose — a known key
+lets anyone forge a session cookie. Fix it in the dashboard:
+
+*Render → your service → Environment → Add*
+
+| Key | Value |
+| --- | --- |
+| `SECRET_KEY` | press **Generate**. Do not type one by hand. |
+| `APP_ENV` | `production` |
+| `AUTO_CREATE_SCHEMA` | `true` |
+| `SESSION_COOKIE_SECURE` | `false` |
+| `ENABLE_SCHEDULER` | `true` |
+
+Then **Manual Deploy**. The build is cached, so this takes about a minute.
+
+Because `RENDER=true` is set automatically on Render, CloudPulse selects the
+production config there whether or not `APP_ENV` is set. That is why a deploy
+with no `APP_ENV` still demands a real key.
+
+To check the same conditions before deploying:
+
+```bash
+python app/preflight.py          # exits 78 and prints the fix if anything is wrong
+```
+
 ### If you created the service by hand instead
 
 A **Web Service** created through *New → Web Service* does **not** read

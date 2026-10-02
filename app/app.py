@@ -74,6 +74,25 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 logger = logging.getLogger("cloudpulse")
 
 
+def _preflight_secrets() -> None:
+    """Print an actionable message if production cannot start.
+
+    Delegates to :mod:`preflight` so the guidance lives in one place, and so it
+    can be run on its own from a shell when diagnosing a deploy.
+    """
+    import preflight
+
+    try:
+        preflight.main()
+    except SystemExit as exit_request:
+        # Same exit code validate_config would produce, but after a message a
+        # human can act on.
+        raise RuntimeError(
+            "CloudPulse cannot start in production: see the preflight report "
+            "above for the environment variable to set."
+        ) from exit_request
+
+
 def create_app(config_name: str | None = None) -> Flask:
     # Resolve the environment name once and use that single value everywhere.
     # Deriving ENV_NAME separately from `get_config` is what allowed a Render
@@ -82,6 +101,12 @@ def create_app(config_name: str | None = None) -> Flask:
     # SECRET_KEY guard entirely.
     env_name = resolve_config_name(config_name)
     configuration = get_config(env_name)
+
+    if env_name == "production":
+        # Explain a missing key before gunicorn reports "Worker failed to boot".
+        # On a PaaS the operator sees "service is live" and an empty page, and
+        # the actual reason is buried in the log they have not opened.
+        _preflight_secrets()
 
     flask_app = Flask(__name__, instance_relative_config=False)
     flask_app.config.from_object(configuration)

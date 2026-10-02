@@ -170,6 +170,76 @@ def test_no_credential_is_hardcoded_in_the_blueprint(blueprint):
 
 
 # ---------------------------------------------------------------------
+# The failure that actually happened on Render
+#
+# The first Render deploy built cleanly and then served "the page isn't working
+# right now". The reason was one missing environment variable, reported by
+# gunicorn as "Worker failed to boot" and by Render as "Your service is live".
+# The preflight makes that legible at the point of failure.
+# ---------------------------------------------------------------------
+
+
+def test_preflight_names_the_missing_variable(capsys, monkeypatch):
+    """The message has to say which variable and which dashboard."""
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.setenv("RENDER", "true")
+
+    import preflight
+
+    with pytest.raises(SystemExit) as exit_info:
+        preflight.main()
+
+    assert exit_info.value.code == 78  # EX_CONFIG
+    output = capsys.readouterr().err
+    assert "SECRET_KEY is not set" in output
+    assert "dashboard.render.com" in output
+    assert "Generate" in output, "it should say the button to press, not just the name"
+
+
+def test_preflight_rejects_a_placeholder_key(capsys, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "replace-me-with-a-long-random-value")
+    monkeypatch.setenv("RENDER", "true")
+
+    import preflight
+
+    with pytest.raises(SystemExit):
+        preflight.main()
+
+    output = capsys.readouterr().err
+    assert "published in this repository" in output
+
+
+def test_preflight_rejects_a_short_key(capsys, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "tooshort")
+
+    import preflight
+
+    with pytest.raises(SystemExit):
+        preflight.main()
+
+    assert "32 is the minimum" in capsys.readouterr().err
+
+
+def test_preflight_passes_a_real_key(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "K" * 48)
+
+    import preflight
+
+    preflight.main()  # must not raise
+
+
+def test_a_missing_key_still_refuses_to_boot(monkeypatch, capsys):
+    """The preflight explains the failure; it must not paper over it."""
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_INSECURE_SECRET_KEY", raising=False)
+
+    from app import create_app
+
+    with pytest.raises(RuntimeError, match="preflight report"):
+        create_app("production")
+
+
+# ---------------------------------------------------------------------
 # A host that only looks at the repository root
 #
 # Render looks for a Dockerfile in the root before anywhere else, and its
