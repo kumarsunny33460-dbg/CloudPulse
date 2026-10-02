@@ -157,11 +157,14 @@ jobs:
         run: |
           python -c "import sys; sys.path.insert(0, 'app'); from app import create_app; create_app('testing')"
 
-      # CLOUDPULSE_SKIP_APP_BUILD stops app.py building an application at
-      # import time, so the import can succeed and the failure is reported by
-      # create_app() itself. Without it the module-level `app = create_app()`
-      # raises during the import and the try/except below never runs.
-      - name: Production refuses to boot without a SECRET_KEY
+      # With no usable key the application no longer crashes: it starts in
+      # diagnostic mode and serves a page naming the variable to set, because a
+      # crashed worker is reported by every PaaS as a bare 503. What must hold is
+      # that nothing behind that page answers and no session can be issued.
+      #
+      # CLOUDPULSE_SKIP_APP_BUILD stops app.py building an application at import
+      # time, so the import succeeds and the check below can drive create_app.
+      - name: Production without a usable SECRET_KEY serves only a setup page
         env:
           APP_ENV: production
           CLOUDPULSE_SKIP_APP_BUILD: "1"
@@ -176,19 +179,27 @@ jobs:
           sys.path.insert(0, "app")
           from app import create_app
 
-          try:
-              create_app("production")
-          except RuntimeError as error:
-              print("Refused to boot, as expected:")
-              print("   ", error)
-              sys.exit(0)
+          app = create_app("production")
+          client = app.test_client()
 
-          print("FAIL: production booted without a SECRET_KEY")
-          sys.exit(1)
+          page = client.get("/")
+          assert page.status_code == 200, f"expected the setup page, got {page.status_code}"
+          assert b"SECRET_KEY" in page.data, "the page must name the variable"
+          assert b"Generate" in page.data, "the page must say what to press"
+
+          for path in ("/api/applications", "/api/cicd", "/metrics"):
+              status = client.get(path).status_code
+              assert status == 503, f"{path} answered {status} without a signing key"
+
+          health = client.get("/health")
+          assert health.status_code == 503
+          assert health.get_json()["status"] == "misconfigured"
+
+          print("No usable key: the setup page renders and nothing else answers.")
           PY
 
-      # The same check for a key that is published in this repository, and for
-      # one that is simply too short to be a real signing key.
+      # A key published in this repository is refused by name, because anyone
+      # who can read the repository could then forge a session cookie.
       - name: Production refuses published placeholder secret keys
         env:
           APP_ENV: production
@@ -199,17 +210,44 @@ jobs:
           import sys
 
           sys.path.insert(0, "app")
+          from config import secret_key_problem
+
+          problem = secret_key_problem()
+          assert problem is not None, "a key published in this repository must be refused"
+          assert "published in this repository" in problem, problem
+
+          print("Refused the published placeholder, as expected:")
+          print("   ", problem)
+          PY
+
+      # And a generated one is accepted, which is the state a real deploy is in.
+      - name: Production accepts a generated secret key
+        env:
+          APP_ENV: production
+          CLOUDPULSE_SKIP_APP_BUILD: "1"
+          SESSION_COOKIE_SECURE: "false"
+        run: |
+          python - <<'PY'
+          import os
+          import secrets
+          import sys
+
+          os.environ["SECRET_KEY"] = secrets.token_urlsafe(48)
+          os.environ["DATABASE_URL"] = ""
+
+          sys.path.insert(0, "app")
           from app import create_app
 
-          try:
-              create_app("production")
-          except RuntimeError as error:
-              print("Refused the published placeholder, as expected:")
-              print("   ", error)
-              sys.exit(0)
+          app = create_app("production")
+          client = app.test_client()
 
-          print("FAIL: production accepted a key published in this repository")
-          sys.exit(1)
+          for path in ("/health", "/login", "/register", "/api/cicd"):
+              status = client.get(path).status_code
+              assert status == 200, f"{path} answered {status} with a real key"
+
+          assert client.get("/").status_code == 302, "the dashboard should require a session"
+
+          print("A generated key serves the application normally.")
           PY
 
       - name: Run automated tests
