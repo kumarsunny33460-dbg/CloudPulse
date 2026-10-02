@@ -82,14 +82,32 @@ def env_list(name: str, default: str = "") -> list[str]:
 def normalize_database_url(url: str) -> str:
     """Normalize provider specific database URLs.
 
-    Render, Heroku and some managed Postgres providers still emit the legacy
-    ``postgres://`` scheme which SQLAlchemy refuses to load.
+    Two provider quirks are handled here.
+
+    **The legacy scheme.** Render, Heroku and some managed Postgres providers
+    still emit ``postgres://``, which SQLAlchemy will not load.
+
+    **The driver.** A bare ``postgresql://`` leaves the driver to SQLAlchemy,
+    and that default is version dependent: SQLAlchemy 2.0 resolves it to
+    ``psycopg2`` and 2.1 resolves it to ``psycopg`` (v3). Only
+    ``psycopg2-binary`` is installed here, so a build that picked up the newer
+    SQLAlchemy died at boot with
+
+        ModuleNotFoundError: No module named 'psycopg'
+
+    Pinning the driver removes the dependency on whichever version happens to be
+    installed. An explicit ``+<driver>`` in the supplied URL is respected.
     """
     if url.startswith("postgres://"):
-        return "postgresql://" + url[len("postgres://") :]
-    if url.startswith("postgresql+psycopg2://"):
+        url = "postgresql://" + url[len("postgres://") :]
+
+    if not url.startswith("postgresql://"):
         return url
-    return url
+
+    if "+" in url.split("://", 1)[0]:
+        return url  # a driver was named explicitly; trust it
+
+    return "postgresql+psycopg2://" + url[len("postgresql://") :]
 
 
 def resolve_database_uri(instance_dir: Path | None = None) -> str:

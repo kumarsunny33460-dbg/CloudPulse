@@ -250,6 +250,44 @@ jobs:
           print("A generated key serves the application normally.")
           PY
 
+      # The driver for a provider DATABASE_URL is pinned in normalize_database_url.
+      # SQLAlchemy 2.0 resolves a bare postgresql:// to psycopg2 and 2.1 to
+      # psycopg (v3); only psycopg2-binary is installed, so a build that picked
+      # up the newer release died at boot with "No module named 'psycopg'".
+      # This fails here instead, where the log is readable.
+      - name: A provider DATABASE_URL resolves to an installed driver
+        run: |
+          python - <<'PY'
+          import sys
+          sys.path.insert(0, "app")
+
+          from sqlalchemy.engine import make_url
+          from config import normalize_database_url
+
+          for provider_url in (
+              "postgres://cloudpulse:secret@db.internal:5432/cloudpulse",
+              "postgresql://cloudpulse:secret@db.internal:5432/cloudpulse",
+          ):
+              normalised = normalize_database_url(provider_url)
+              driver = make_url(normalised).drivername
+              assert driver == "postgresql+psycopg2", f"{provider_url} -> {driver}"
+
+          # Importing the dbapi is what actually failed on Render.
+          from sqlalchemy import create_engine
+          engine = create_engine(
+              "postgresql+psycopg2://u:p@127.0.0.1:1/db", connect_args={"connect_timeout": 1}
+          )
+          try:
+              engine.connect()
+          except Exception as error:
+              assert "psycopg2" in str(type(error).__module__) or "OperationalError" in type(error).__name__, (
+                  f"the driver failed to load: {type(error).__module__}.{type(error).__name__}"
+              )
+              print(f"Driver loaded: {type(error).__module__}")
+          else:
+              raise SystemExit("expected the connection to 127.0.0.1:1 to fail")
+          PY
+
       - name: Run automated tests
         run: |
           pytest tests -v

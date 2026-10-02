@@ -163,10 +163,23 @@ def test_health_check_serializer(app, session, make_application):
 # ---------------------------------------------------------------------
 
 def test_database_url_normalisation():
+    """The driver is pinned; see tests/test_database_url.py for the why.
+
+    Leaving a bare postgresql:// alone meant the driver came from whatever
+    SQLAlchemy version was installed, and the first Render deploy failed with
+    "No module named 'psycopg'" because only psycopg2 is in requirements.txt.
+    """
     from config import normalize_database_url
 
-    assert normalize_database_url("postgres://u:p@h/db").startswith("postgresql://")
-    assert normalize_database_url("postgresql://u:p@h/db") == "postgresql://u:p@h/db"
+    assert normalize_database_url("postgres://u:p@h/db") == (
+        "postgresql+psycopg2://u:p@h/db"
+    )
+    assert normalize_database_url("postgresql://u:p@h/db") == (
+        "postgresql+psycopg2://u:p@h/db"
+    )
+    assert normalize_database_url("postgresql+psycopg://u:p@h/db") == (
+        "postgresql+psycopg://u:p@h/db"
+    )
 
 
 def test_env_helpers(monkeypatch):
