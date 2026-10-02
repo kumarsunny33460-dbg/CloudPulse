@@ -329,22 +329,43 @@ jobs:
       # security check rather than on anything to do with the image.
       - name: Smoke test the published image
         run: |
+          # Pull first so a registry failure is reported as itself rather than
+          # as twenty failed health checks.
+          docker pull ghcr.io/${{ github.repository_owner }}/cloudpulse:${{ github.sha }}
+
+          # The key must satisfy the same production check the application
+          # enforces: at least 32 characters and not one of the published
+          # placeholders. A short value here is refused at boot, so the smoke
+          # test would fail on the security check rather than on the image.
           docker run -d --name cloudpulse-smoke \
             -e APP_ENV=production \
             -e SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')" \
             -p 5000:5000 \
             ghcr.io/${{ github.repository_owner }}/cloudpulse:${{ github.sha }}
-          for attempt in $(seq 1 20); do
-            if curl -fsS http://127.0.0.1:5000/health; then
-              echo "Image is healthy"
+
+          # 60 attempts of 3 seconds is three minutes. A cold runner that just
+          # pulled a 300 MB image can take well over the 40 seconds this
+          # previously allowed, and the failure then says nothing about why.
+          for attempt in $(seq 1 60); do
+            if curl -fsS --max-time 5 http://127.0.0.1:5000/health; then
+              echo ""
+              echo "Image is healthy after ${attempt} attempt(s)."
               docker rm -f cloudpulse-smoke
               exit 0
             fi
-            sleep 2
+            # Stop early if the container has already given up.
+            if [ "$(docker inspect -f '{{.State.Status}}' cloudpulse-smoke 2>/dev/null)" = "exited" ]; then
+              break
+            fi
+            sleep 3
           done
-          echo "Image did not become healthy"
-          docker logs cloudpulse-smoke
-          docker rm -f cloudpulse-smoke
+
+          echo "::error::The published image never became healthy."
+          echo "--- container state ---"
+          docker inspect -f 'status={{.State.Status}} exit={{.State.ExitCode}}' cloudpulse-smoke || true
+          echo "--- container logs ---"
+          docker logs cloudpulse-smoke 2>&1 | tail -60 || true
+          docker rm -f cloudpulse-smoke || true
           exit 1
 
       - name: Verify Docker image
