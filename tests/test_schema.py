@@ -208,11 +208,12 @@ def test_the_generated_ddl_uses_the_boolean_keyword():
         nullable = False
         type = BooleanType()
 
-    class FakeDialect:
-        pass
+    # The real PostgreSQL dialect, because the point is what SQL PostgreSQL is
+    # asked to run rather than what a stand-in produces.
+    from sqlalchemy.dialects import postgresql
 
     class FakeEngine:
-        dialect = FakeDialect()
+        dialect = postgresql.dialect()
 
     literal = _backfill_literal(BooleanColumn())
     statement = _column_ddl(FakeEngine(), "users", BooleanColumn(), literal)
@@ -221,3 +222,51 @@ def test_the_generated_ddl_uses_the_boolean_keyword():
     assert "DEFAULT 0" not in statement, (
         "an integer default on a BOOLEAN column is rejected by PostgreSQL"
     )
+
+
+def test_the_column_default_and_the_backfill_literal_agree():
+    """Both paths that render a boolean must agree.
+
+    _constant_default runs whenever the column carries a Python side default,
+    which is the common case; _backfill_literal only handles the columns that
+    do not. Fixing one and not the other left is_verified unfixed, because
+    column.default is not None so the backfill literal was never consulted.
+    """
+    from sqlalchemy import Boolean, Column
+    from sqlalchemy.schema import CreateColumn
+
+    from services.schema import _backfill_literal, _column_ddl, _constant_default
+
+    # The real PostgreSQL dialect, because the point is what SQL PostgreSQL is
+    # asked to run rather than what a stand-in produces.
+    from sqlalchemy.dialects import postgresql
+
+    class FakeEngine:
+        dialect = postgresql.dialect()
+
+    with_default = Column("is_verified", Boolean, default=False, nullable=False)
+    without_default = Column("is_paused", Boolean, nullable=False)
+
+    for column in (with_default, without_default):
+        constant = _constant_default(column)
+        backfill = _backfill_literal(column)
+        statement = _column_ddl(FakeEngine(), "users", column, constant or backfill)
+
+        assert "DEFAULT false" in statement, (
+            f"{column.name}: PostgreSQL rejects an integer default on a BOOLEAN "
+            f"column. Statement was: {statement}"
+        )
+        assert "DEFAULT 0" not in statement
+        assert "DEFAULT 1" not in statement
+
+    assert _constant_default(with_default) == "false"
+    assert _backfill_literal(without_default) == "false"
+
+
+def test_a_true_boolean_default_is_still_a_boolean():
+    from sqlalchemy import Boolean, Column
+
+    from services.schema import _constant_default
+
+    column = Column("flag", Boolean, default=True, nullable=False)
+    assert _constant_default(column) == "true"

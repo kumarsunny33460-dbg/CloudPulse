@@ -40,7 +40,18 @@ def _constant_default(column) -> str | None:
 
     value = default.arg
     if isinstance(value, bool):
-        return "1" if value else "0"
+        # A keyword, not 0/1. SQLite coerces an integer into a boolean;
+        # PostgreSQL rejects it outright --
+        #   ERROR: column "is_verified" is of type boolean but default
+        #          expression is of type integer
+        # -- and the column is never created, after which every query against
+        # the table fails. Note bool is a subclass of int, so this must be
+        # checked first.
+        #
+        # This path is taken whenever the column carries a Python side default,
+        # which is the common case; _backfill_literal only handles the columns
+        # that do not, so fixing one alone leaves the other broken.
+        return "true" if value else "false"
     if isinstance(value, (int, float)):
         return str(value)
     if isinstance(value, str):
