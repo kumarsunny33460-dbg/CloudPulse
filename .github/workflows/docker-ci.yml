@@ -53,10 +53,31 @@ jobs:
       # first step for that reason alone.
       - name: Validate the workflow files
         run: |
+          set -euo pipefail
+
           curl -sSfL \
             https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
             | tar -xz -C /tmp actionlint
-          /tmp/actionlint .github/workflows/*.yml
+          chmod +x /tmp/actionlint
+
+          # One file at a time with the result echoed. A single glob hides which
+          # file was at fault, and a silent failure here means the workflow is
+          # not being checked at all, which is the failure mode it exists to
+          # prevent.
+          status=0
+          for workflow in .github/workflows/*.yml; do
+            echo "::group::$workflow"
+            if ! /tmp/actionlint "$workflow"; then
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+
+          if [ "$status" -ne 0 ]; then
+            echo "A workflow file has a syntax error; see the output above."
+            exit 1
+          fi
+          echo "All workflow files are valid."
 
   # ==========================================================
   # JOB 2 — INFRASTRUCTURE CONFIG
