@@ -42,6 +42,14 @@ jobs:
       - name: Run ruff
         run: ruff check app tools tests
 
+      # A workflow file with a syntax error is rejected whole, so not one job
+      # runs and the failure reports zero jobs and no reason. Adding a
+      # `services:` block to a step instead of the job did exactly that, and six
+      # consecutive runs failed with nothing to act on. actionlint is what names
+      # the offending line.
+      - name: Validate the workflow files
+        uses: docker://rhysd/actionlint:1.7.7
+
   # ==========================================================
   # JOB 2 — INFRASTRUCTURE CONFIG
   #
@@ -137,6 +145,29 @@ jobs:
     name: Run Application Tests
     runs-on: ubuntu-latest
     needs: lint
+
+    # A real PostgreSQL for the whole job. The suite runs on SQLite, and SQLite
+    # accepts things PostgreSQL rejects -- notably `DEFAULT 0` on a BOOLEAN
+    # column -- so the schema repair path was never exercised against the engine
+    # that first refused it, and the first Render deploy died on exactly that.
+    #
+    # `services` belongs to the job, not to a step: putting it on a step is a
+    # syntax error, and GitHub rejects the whole workflow file rather than one
+    # step, so no jobs ran at all.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cloudpulse
+          POSTGRES_PASSWORD: cloudpulse
+          POSTGRES_DB: cloudpulse_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cloudpulse"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout source code
@@ -295,20 +326,6 @@ jobs:
       # which left the column missing and broke every query afterwards. The
       # whole suite runs on SQLite, so the real engine is needed here.
       - name: Schema sync against a real PostgreSQL
-        services:
-          postgres:
-            image: postgres:16-alpine
-            env:
-              POSTGRES_USER: cloudpulse
-              POSTGRES_PASSWORD: cloudpulse
-              POSTGRES_DB: cloudpulse_test
-            ports:
-              - 5432:5432
-            options: >-
-              --health-cmd "pg_isready -U cloudpulse"
-              --health-interval 5s
-              --health-timeout 5s
-              --health-retries 10
         env:
           DATABASE_URL: postgresql://cloudpulse:cloudpulse@localhost:5432/cloudpulse_test
           AUTO_CREATE_SCHEMA: "true"
