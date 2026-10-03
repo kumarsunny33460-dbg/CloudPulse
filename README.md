@@ -10,7 +10,7 @@ exports and a Prometheus endpoint.
 > DevOps major project — built with Flask, PostgreSQL, Docker, GitHub Actions,
 > AWS (Terraform), Kubernetes, Prometheus and Grafana.
 
-🔴 #Live Demo : https://cloudpulse-4d2q.onrender.com/
+🔴 **[Live Demo](https://cloudpulse-4d2q.onrender.com/)**
 
 ---
 
