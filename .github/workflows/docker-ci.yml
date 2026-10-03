@@ -288,6 +288,87 @@ jobs:
               raise SystemExit("expected the connection to 127.0.0.1:1 to fail")
           PY
 
+      # The schema sync generates ALTER TABLE statements that SQLite accepts and
+      # PostgreSQL rejects. The first Render deploy failed on
+      #   column "is_verified" is of type boolean but default expression is of
+      #   type integer
+      # which left the column missing and broke every query afterwards. The
+      # whole suite runs on SQLite, so the real engine is needed here.
+      - name: Schema sync against a real PostgreSQL
+        services:
+          postgres:
+            image: postgres:16-alpine
+            env:
+              POSTGRES_USER: cloudpulse
+              POSTGRES_PASSWORD: cloudpulse
+              POSTGRES_DB: cloudpulse_test
+            ports:
+              - 5432:5432
+            options: >-
+              --health-cmd "pg_isready -U cloudpulse"
+              --health-interval 5s
+              --health-timeout 5s
+              --health-retries 10
+        env:
+          DATABASE_URL: postgresql://cloudpulse:cloudpulse@localhost:5432/cloudpulse_test
+          AUTO_CREATE_SCHEMA: "true"
+          AUTO_SCHEMA_SYNC: "true"
+          APP_ENV: development
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+
+          sys.path.insert(0, "app")
+
+          from sqlalchemy import text
+          from app import create_app
+          from extensions import db
+          from services import schema as schema_service
+
+          app = create_app("development")
+
+          with app.app_context():
+              db.drop_all()
+
+              # An older deployment: the newer columns are absent, which is
+              # exactly the state the sync exists to repair.
+              db.session.execute(text(
+                  "CREATE TABLE users ("
+                  "id SERIAL PRIMARY KEY, username VARCHAR(80) NOT NULL, "
+                  "email VARCHAR(255) NOT NULL, password_hash VARCHAR(255) NOT NULL, "
+                  "role VARCHAR(20) NOT NULL DEFAULT 'Viewer', "
+                  "created_at TIMESTAMP NOT NULL)"
+              ))
+              db.session.commit()
+
+              schema_service.sync_schema()
+
+              columns = [
+                  row[0] for row in db.session.execute(text(
+                      "SELECT column_name FROM information_schema.columns "
+                      "WHERE table_name = 'users'"))
+              ]
+              assert "is_verified" in columns, (
+                  f"users.is_verified was not created; columns: {columns}"
+              )
+              print(f"users.is_verified created; {len(columns)} columns present.")
+
+              # And it is usable, which is the part that actually failed.
+              from models import User
+              from werkzeug.security import generate_password_hash
+
+              db.session.add(User(
+                  username="ci", email="ci@cloudpulse.test",
+                  password_hash=generate_password_hash("Str0ng!Passw0rd"),
+                  role="Admin",
+              ))
+              db.session.commit()
+
+              user = db.session.query(User).filter_by(email="ci@cloudpulse.test").one()
+              print(f"user.is_verified = {user.is_verified!r}")
+          PY
+
       - name: Run automated tests
         run: |
           pytest tests -v

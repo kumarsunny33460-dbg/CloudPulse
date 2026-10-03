@@ -57,7 +57,13 @@ def _backfill_literal(column) -> str | None:
         return None
 
     if issubclass(python_type, bool):
-        return "0"
+        # Not "0". SQLite coerces an integer default into a boolean happily;
+        # PostgreSQL refuses it outright:
+        #   ERROR: column "is_verified" is of type boolean but default
+        #          expression is of type integer
+        # and the column is then never created, which breaks every query against
+        # the table afterwards. Spelling it as a keyword is accepted by both.
+        return "false"
     if issubclass(python_type, (int, float)):
         return "0"
     if issubclass(python_type, str):

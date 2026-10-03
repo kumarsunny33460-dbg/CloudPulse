@@ -162,3 +162,62 @@ def test_sync_adds_columns_to_a_populated_table(app, admin_client, make_applicat
         rows = db.session.execute(text("SELECT consecutive_failures FROM applications")).all()
         assert len(rows) == 3
         assert all(row[0] == 0 for row in rows)
+
+
+def test_a_boolean_column_gets_a_boolean_default():
+    """PostgreSQL refuses an integer default on a boolean column.
+
+    SQLite coerces ``DEFAULT 0`` into a boolean, so every schema test passed
+    locally. On PostgreSQL the ALTER TABLE failed with
+
+        ERROR: column "is_verified" is of type boolean but default expression
+               is of type integer
+
+    the column was never created, the index over it failed, and from then on
+    every query against the table returned "column does not exist". The first
+    Render deploy died that way.
+    """
+    from services.schema import _backfill_literal
+
+    class BooleanColumn:
+        class _Type:
+            python_type = bool
+
+        type = _Type()
+
+    literal = _backfill_literal(BooleanColumn())
+
+    assert literal is not None
+    assert literal.lower() == "false", (
+        f"a boolean default must be spelled as a boolean keyword, got {literal!r}"
+    )
+
+
+def test_the_generated_ddl_uses_the_boolean_keyword():
+    """End to end: what actually reaches the server."""
+    from services.schema import _backfill_literal, _column_ddl
+
+    class BooleanType:
+        python_type = bool
+
+        def compile(self, dialect=None):
+            return "BOOLEAN"
+
+    class BooleanColumn:
+        name = "is_verified"
+        nullable = False
+        type = BooleanType()
+
+    class FakeDialect:
+        pass
+
+    class FakeEngine:
+        dialect = FakeDialect()
+
+    literal = _backfill_literal(BooleanColumn())
+    statement = _column_ddl(FakeEngine(), "users", BooleanColumn(), literal)
+
+    assert "DEFAULT false" in statement
+    assert "DEFAULT 0" not in statement, (
+        "an integer default on a BOOLEAN column is rejected by PostgreSQL"
+    )
