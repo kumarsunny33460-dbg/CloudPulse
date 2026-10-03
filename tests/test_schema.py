@@ -232,10 +232,8 @@ def test_the_column_default_and_the_backfill_literal_agree():
     do not. Fixing one and not the other left is_verified unfixed, because
     column.default is not None so the backfill literal was never consulted.
     """
-    from sqlalchemy import Boolean, Column
-    from sqlalchemy.schema import CreateColumn
-
     from services.schema import _backfill_literal, _column_ddl, _constant_default
+    from sqlalchemy import Boolean, Column
 
     # The real PostgreSQL dialect, because the point is what SQL PostgreSQL is
     # asked to run rather than what a stand-in produces.
@@ -264,9 +262,8 @@ def test_the_column_default_and_the_backfill_literal_agree():
 
 
 def test_a_true_boolean_default_is_still_a_boolean():
-    from sqlalchemy import Boolean, Column
-
     from services.schema import _constant_default
+    from sqlalchemy import Boolean, Column
 
     column = Column("flag", Boolean, default=True, nullable=False)
     assert _constant_default(column) == "true"
